@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+aiosmtplib
+python-dotenv
+pydantic
+pydantic-settings
+
+# Development dependencies
+pytest
+pytest-asyncio
+httpx
+black
+flake8
