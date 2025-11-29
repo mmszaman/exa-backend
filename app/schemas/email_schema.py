@@ -22,7 +22,7 @@ class EmailRecipient(BaseModel):
 
 
 class SendEmailRequest(BaseModel):
-    """Request schema for sending emails."""
+    """Request schema for sending emails. All fields required except HTML body."""
     
     recipients: List[EmailStr] = Field(
         ...,
@@ -38,21 +38,22 @@ class SendEmailRequest(BaseModel):
         description="Email subject line"
     )
 
-    from_name: Optional[str] = Field(
+    from_name: str = Field(
         ...,
+        min_length=1,
         max_length=100,
-        description="Optional sender name"
+        description="Sender display name"
     )
     
-    from_email: Optional[EmailStr] = Field(
+    from_email: EmailStr = Field(
         ...,
-        description="Optional sender email"
+        description="Sender email address"
     )
     
     body_text: str = Field(
         ...,
         min_length=1,
-        description="Plain text email body"
+        description="Plain text email body (required)"
     )
     
     body_html: Optional[str] = Field(
@@ -114,13 +115,13 @@ class EmailSendResult(BaseModel):
 
 
 class SendTemplateEmailRequest(BaseModel):
-    """Request schema for sending template-based emails."""
+    """Request schema for sending template-based emails. All top-level fields required except context which may be empty."""
     
     recipients: List[EmailStr] = Field(
         ...,
         min_length=1,
         max_length=100,
-        description="List of email addresses to send to"
+        description="Recipient email addresses"
     )
 
     subject: str = Field(
@@ -130,15 +131,16 @@ class SendTemplateEmailRequest(BaseModel):
         description="Email subject line"
     )
     
-    from_name: Optional[str] = Field(
+    from_name: str = Field(
         ...,
+        min_length=1,
         max_length=100,
-        description="Sender name (optional)"
+        description="Sender display name"
     )
     
-    from_email: Optional[EmailStr] = Field(
+    from_email: EmailStr = Field(
         ...,
-        description="Sender email (optional)"
+        description="Sender email address"
     )
     
     template_name: str = Field(

@@ -23,7 +23,7 @@ async def test_email_api():
         print("-" * 60)
         
         try:
-            response = await client.get(f"{base_url}/api/email/health")
+            response = await client.get(f"{base_url}/api/email/check")
             print(f"Status: {response.status_code}")
             print(f"Response: {response.json()}")
         except Exception as e:
@@ -41,6 +41,7 @@ async def test_email_api():
             "template_name": "welcome",
             "subject": "Welcome to Exateks!",
             "from_name": "Exateks Team",
+            "from_email": "support@exateks.com",
             "context": {
                 "user_name": "Muhammad Salah",
                 "verify_url": "https://example.com/verify/abc123xyz456",

@@ -188,10 +188,9 @@ async def send_template_email(request: SendTemplateEmailRequest):
                 detail=f"Template error: {str(e)}"
             )
         
-        # Get subject and from_name (passed by caller, just like EmailService)
+        # Subject and sender are mandatory in schema
         subject = request.subject
-        from_name = request.from_name or "Exa"
-        
+        from_name = request.from_name
         logger.debug(f"Subject: {subject}")
         logger.debug(f"From Name: {from_name}")
         
