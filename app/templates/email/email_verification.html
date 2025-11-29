@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 style="color: #333333; margin-bottom: 20px;">Verify Your Email Address</h2>
+
+<p>Hi {{ user_name or 'there' }},</p>
+
+<p>Thank you for signing up with {{ company_name }}! To complete your registration and activate your account, please verify your email address.</p>
+
+{% if verify_url %}
+<div class="text-center">
+    <a href="{{ verify_url }}" class="button">Verify Email Address</a>
+</div>
+
+<p class="text-muted">Click the button above to verify your email. This verification link will expire in {{ expiry_hours or '24' }} hours.</p>
+{% endif %}
+
+{% if verification_code %}
+<div class="divider"></div>
+
+<h3 style="color: #333333; margin-top: 30px; margin-bottom: 15px;">Or use this verification code:</h3>
+
+<div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+    <code style="font-size: 24px; font-weight: bold; letter-spacing: 3px; color: #667eea;">{{ verification_code }}</code>
+</div>
+
+<p class="text-muted text-center">Enter this code on the verification page to activate your account.</p>
+{% endif %}
+
+<div class="divider"></div>
+
+<p style="margin-top: 30px; padding: 15px; background-color: #e7f3ff; border-left: 4px solid #2196F3; border-radius: 4px;">
+    <strong style="color: #0c5460;">ℹ️ Why verify your email?</strong><br>
+    <span style="color: #0c5460;">Email verification helps us ensure the security of your account and allows us to send you important updates and notifications.</span>
+</p>
+
+<p style="margin-top: 20px;">
+    Best regards,<br>
+    <strong>The {{ company_name }} Team</strong>
+</p>
+{% endblock %}

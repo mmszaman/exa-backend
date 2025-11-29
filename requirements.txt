@@ -3,3 +3,7 @@ uvicorn[standard]
 aiosmtplib
 python-dotenv
 pydantic
+pydantic-settings
+email-validator
+httpx
+jinja2

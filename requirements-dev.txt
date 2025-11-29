@@ -4,6 +4,7 @@ aiosmtplib
 python-dotenv
 pydantic
 pydantic-settings
+email-validator
 
 # Development dependencies
 pytest

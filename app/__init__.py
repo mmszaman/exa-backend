@@ -1,1 +1,3 @@
-"""Exakeep Backend - Package initialization."""
+"""
+Exa Backend - Package initialization.
+"""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Entry point for running the Exakeep backend.
+Entry point for running the Exa backend.
 Usage: python run.py
 """
 
