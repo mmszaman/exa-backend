@@ -26,6 +26,9 @@ wheels/
 # Virtual environments
 .venv/
 .env
+.env.development
+.env.production
+.env.staging
 
 # IDE
 .vscode/
@@ -38,6 +41,7 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+/tests
 
 # Logs
 *.log
