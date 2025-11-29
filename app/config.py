@@ -1,8 +1,25 @@
+"""Configuration module - dynamic settings loader.
+
+Supports multiple environment files selected via APP_ENV:
+- APP_ENV=development -> .env.development (default)
+- APP_ENV=staging     -> .env.staging (optional)
+- APP_ENV=production  -> .env.production
+
+OS environment variables always override values from files.
 """
-Configuration module - settings from environment variables
-"""
+import os
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from app.core.logger import get_logger
+
+_env = os.getenv("APP_ENV", "development").lower().strip()
+_env_file_map = {
+    "development": ".env.development",
+    "staging": ".env.staging",
+    "production": ".env.production",
+}
+_selected_env_file = _env_file_map.get(_env, ".env.development")
+_logger = get_logger("config")
 
 
 class Settings(BaseSettings):
@@ -11,8 +28,8 @@ class Settings(BaseSettings):
     See .env.example for template.
     """
     model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=True
+        env_file=_selected_env_file,
+        case_sensitive=True,
     )
 
     # App config
@@ -40,5 +57,18 @@ class Settings(BaseSettings):
     DEV_FAKE_EMAILS: bool = False
     DEV_FAKE_LOG: str = "sent_emails.log"
 
-
 settings = Settings()
+
+# Startup diagnostics
+_logger.info(f"Loaded settings for APP_ENV='{_env}' from '{_selected_env_file}'")
+
+if _env == "production":
+    missing = []
+    if not settings.EMAIL_USER:
+        missing.append("EMAIL_USER")
+    if not settings.EMAIL_PASSWORD:
+        missing.append("EMAIL_PASSWORD")
+    if missing:
+        _logger.warning(
+            "Production environment missing critical email config: " + ", ".join(missing)
+        )
