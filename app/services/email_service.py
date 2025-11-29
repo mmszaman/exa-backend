@@ -47,11 +47,10 @@ class EmailService:
         """
         msg = EmailMessage()
         
-        # Set sender - use SEND_FROM if available, otherwise EMAIL_USER
+        # Set headers
         msg['To'] = to_email
         msg['Subject'] = subject
-        from_email = from_email
-        msg['From'] = from_name
+        msg['From'] = f"{from_name} <{from_email}>"
         
         # Set plain text content
         msg.set_content(body_text)
