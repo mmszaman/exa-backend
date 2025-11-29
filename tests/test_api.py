@@ -39,6 +39,8 @@ async def test_email_api():
         template_data = {
             "recipients": ["exateks@gmail.com"],
             "template_name": "welcome",
+            "subject": "Welcome to Exateks!",
+            "from_name": "Exateks Team",
             "context": {
                 "user_name": "Muhammad Salah",
                 "verify_url": "https://example.com/verify/abc123xyz456",

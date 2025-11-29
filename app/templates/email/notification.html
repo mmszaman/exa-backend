@@ -1,35 +1,16 @@
-{% extends "base.html" %}
+{% extends "base_template.html" %}
 
 {% block content %}
-<h2 style="color: #333333; margin-bottom: 20px;">{{ notification_title or 'Notification' }}</h2>
+<h2 style="color: #333333; margin-bottom: 20px;">{{ title }}</h2>
 
-<p>Hi {{ user_name or 'there' }},</p>
+<p>Hi {{ user_name }},</p>
 
-{% if message %}
 <p>{{ message }}</p>
-{% else %}
-<p>You have a new notification from {{ company_name }}.</p>
-{% endif %}
 
-{% if notification_type == 'success' %}
+{% if website_url %}
 <div style="background-color: #d4edda; border-left: 4px solid #28a745; padding: 15px; border-radius: 4px; margin: 20px 0;">
-    <strong style="color: #155724;">✅ {{ notification_heading or 'Success!' }}</strong><br>
-    <span style="color: #155724;">{{ notification_text or 'Your action was completed successfully.' }}</span>
-</div>
-{% elif notification_type == 'warning' %}
-<div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;">
-    <strong style="color: #856404;">⚠️ {{ notification_heading or 'Warning' }}</strong><br>
-    <span style="color: #856404;">{{ notification_text or 'Please review this important information.' }}</span>
-</div>
-{% elif notification_type == 'error' %}
-<div style="background-color: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; border-radius: 4px; margin: 20px 0;">
-    <strong style="color: #721c24;">❌ {{ notification_heading or 'Error' }}</strong><br>
-    <span style="color: #721c24;">{{ notification_text or 'An error occurred that requires your attention.' }}</span>
-</div>
-{% elif notification_type == 'info' %}
-<div style="background-color: #e7f3ff; border-left: 4px solid #2196F3; padding: 15px; border-radius: 4px; margin: 20px 0;">
-    <strong style="color: #0c5460;">ℹ️ {{ notification_heading or 'Information' }}</strong><br>
-    <span style="color: #0c5460;">{{ notification_text or 'Here is some information you should know.' }}</span>
+    <strong style="color: #155724;">✅ Website is Online!</strong><br>
+    <span style="color: #155724;">{{ website_url }}</span>
 </div>
 {% endif %}
 
@@ -37,24 +18,6 @@
 <div class="text-center">
     <a href="{{ action_url }}" class="button">{{ action_text }}</a>
 </div>
-{% endif %}
-
-{% if additional_info %}
-<div class="divider"></div>
-
-<h3 style="color: #333333; margin-top: 30px; margin-bottom: 15px;">Additional Details</h3>
-
-<p>{{ additional_info }}</p>
-{% endif %}
-
-{% if items %}
-<div class="divider"></div>
-
-<ul style="margin-left: 20px; margin-top: 10px;">
-    {% for item in items %}
-    <li style="margin: 8px 0;">{{ item }}</li>
-    {% endfor %}
-</ul>
 {% endif %}
 
 <p style="margin-top: 30px;">

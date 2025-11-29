@@ -7,7 +7,7 @@ import aiosmtplib
 from fastapi import APIRouter, HTTPException, status
 
 from app.services.email_service import EmailService
-from app.services.email_template_service import template_service
+from app.services.email_render import template_service
 from app.core.logger import get_logger
 from app.schemas.email_schema import (
     SendEmailRequest, 
@@ -39,9 +39,10 @@ async def send_email(request: SendEmailRequest):
     {
         "recipients": ["user@example.com"],
         "subject": "Welcome to Exa!",
+        "from_name": "Exa Team",
+        "from_email": "support@exateks.com"
         "body_text": "Welcome to our platform!",
-        "body_html": "<h1>Welcome to our platform!</h1>",
-        "from_name": "Exa Team"
+        "body_html": "<h1>Welcome to our platform!</h1>"
     }
     ```
     """
@@ -53,10 +54,10 @@ async def send_email(request: SendEmailRequest):
         results = await EmailService.send_email(
             recipients=request.recipients,
             subject=request.subject,
-            body_text=request.body_text,
-            body_html=request.body_html,
             from_name=request.from_name,
-            from_email=request.from_email
+            from_email=request.from_email,
+            body_text=request.body_text,
+            body_html=request.body_html
         )
         
         # Convert results to response format
@@ -175,39 +176,37 @@ async def send_template_email(request: SendTemplateEmailRequest):
     logger.debug(f"Context variables: {list(request.context.keys())}")
     
     try:
-        # Get template subject and from_name (with override support)
-        subject = request.subject_override or template_service.get_subject(request.template_name, request.context)
-        from_name = request.from_name_override or template_service.get_from_name(request.template_name, request.context)
-        
-        logger.debug(f"Subject: {subject}")
-        logger.debug(f"From Name: {from_name}")
-        
-        # Render the template
+        # Render template (simple - just get HTML and text bodies)
         try:
-            html_body = template_service.render_template(request.template_name, request.context)
-            logger.debug(f"Template '{request.template_name}' rendered successfully ({len(html_body)} chars)")
+            body_html, body_text = template_service.render_template(
+                template_name=request.template_name,
+                context=request.context
+            )
+            
+            logger.debug(f"Template rendered: HTML {len(body_html)} chars, Text {len(body_text)} chars")
+            
         except Exception as e:
             logger.error(f"Template rendering failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Template rendering error: {str(e)}"
+                detail=f"Template error: {str(e)}"
             )
         
-        # Create plain text version (strip HTML tags for basic fallback)
-        # Simple HTML stripping - for production, consider using html2text library
-        import re
-        text_body = re.sub('<[^<]+?>', '', html_body)
-        text_body = re.sub(r'\n\s*\n', '\n\n', text_body)  # Clean up extra newlines
-        text_body = text_body.strip()
+        # Get subject and from_name (passed by caller, just like EmailService)
+        subject = request.subject
+        from_name = request.from_name or "Exa"
+        
+        logger.debug(f"Subject: {subject}")
+        logger.debug(f"From Name: {from_name}")
         
         # Send emails using the email service
         results = await EmailService.send_email(
             recipients=request.recipients,
             subject=subject,
-            body_text=text_body,
-            body_html=html_body,
             from_name=from_name,
-            from_email=request.from_email
+            from_email=request.from_email,
+            body_text=body_text,
+            body_html=body_html
         )
         
         # Convert results to response format

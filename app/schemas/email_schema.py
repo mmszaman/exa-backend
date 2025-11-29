@@ -37,6 +37,17 @@ class SendEmailRequest(BaseModel):
         max_length=200,
         description="Email subject line"
     )
+
+    from_name: Optional[str] = Field(
+        ...,
+        max_length=100,
+        description="Optional sender name"
+    )
+    
+    from_email: Optional[EmailStr] = Field(
+        ...,
+        description="Optional sender email"
+    )
     
     body_text: str = Field(
         ...,
@@ -49,16 +60,6 @@ class SendEmailRequest(BaseModel):
         description="HTML email body (optional, falls back to text)"
     )
     
-    from_name: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="Optional sender name"
-    )
-    
-    from_email: Optional[EmailStr] = Field(
-        None,
-        description="Optional sender email"
-    )
     
     @field_validator('recipients')
     @classmethod
@@ -85,10 +86,10 @@ class SendEmailRequest(BaseModel):
             "example": {
                 "recipients": ["user1@example.com", "user2@example.com"],
                 "subject": "Welcome to our platform",
-                "body_text": "Hello! Welcome to our platform. We're glad to have you.",
-                "body_html": "<h1>Hello!</h1><p>Welcome to our platform. We're glad to have you.</p>",
                 "from_name": "Exa Team",
-                "from_email": "support@exateks.com"
+                "from_email": "support@exateks.com",
+                "body_text": "Hello! Welcome to our platform. We're glad to have you.",
+                "body_html": "<h1>Hello!</h1><p>Welcome to our platform. We're glad to have you.</p>"
             }
         }
 
@@ -121,6 +122,24 @@ class SendTemplateEmailRequest(BaseModel):
         max_length=100,
         description="List of email addresses to send to"
     )
+
+    subject: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Email subject line"
+    )
+    
+    from_name: Optional[str] = Field(
+        ...,
+        max_length=100,
+        description="Sender name (optional)"
+    )
+    
+    from_email: Optional[EmailStr] = Field(
+        ...,
+        description="Sender email (optional)"
+    )
     
     template_name: str = Field(
         ...,
@@ -131,23 +150,6 @@ class SendTemplateEmailRequest(BaseModel):
     context: Dict[str, Any] = Field(
         default_factory=dict,
         description="Template variables (user_name, verify_url, reset_url, etc.)"
-    )
-    
-    subject_override: Optional[str] = Field(
-        None,
-        max_length=200,
-        description="Optional custom subject line (overrides template default)"
-    )
-    
-    from_name_override: Optional[str] = Field(
-        None,
-        max_length=100,
-        description="Optional custom sender name (overrides template default)"
-    )
-    
-    from_email: Optional[EmailStr] = Field(
-        None,
-        description="Optional sender email"
     )
     
     @field_validator('recipients')
@@ -181,14 +183,15 @@ class SendTemplateEmailRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "recipients": ["user@example.com"],
+                "subject": "Welcome to Exateks!",
+                "from_name": "Exateks Team",
+                "from_email": "support@exateks.com",
                 "template_name": "welcome",
                 "context": {
                     "user_name": "John Doe",
-                    "verify_url": "https://example.com/verify/abc123"
-                },
-                "subject_override": None,
-                "from_name_override": None,
-                "from_email": "support@exateks.com"
+                    "verify_url": "https://example.com/verify/abc123",
+                    "company_name": "Exateks"
+                }
             }
         }
 

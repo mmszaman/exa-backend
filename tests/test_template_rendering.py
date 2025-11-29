@@ -8,7 +8,7 @@ import os
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.email_template_service import template_service
+from app.services.email_render import template_service
 
 
 # Test 1: Welcome template

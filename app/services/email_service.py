@@ -26,10 +26,10 @@ class EmailService:
     def _create_email_message(
         to_email: str,
         subject: str,
+        from_name: str,
+        from_email: str,
         body_text: str,
-        body_html: Optional[str] = None,
-        from_email: Optional[str] = None,
-        from_name: Optional[str] = None
+        body_html: Optional[str] = None
     ) -> EmailMessage:
         """
         Create an email message with text and optional HTML content.
@@ -37,10 +37,10 @@ class EmailService:
         Args:
             to_email: Recipient email address
             subject: Email subject
+            from_email: Sender email
+            from_name: Sender name
             body_text: Plain text body
             body_html: Optional HTML body
-            from_email: Sender email (defaults to config)
-            from_name: Sender name (optional)
             
         Returns:
             EmailMessage: Configured email message
@@ -48,15 +48,10 @@ class EmailService:
         msg = EmailMessage()
         
         # Set sender - use SEND_FROM if available, otherwise EMAIL_USER
-        from_email = from_email or settings.SEND_FROM or settings.EMAIL_USER
-        if from_name:
-            msg['From'] = f"{from_name} <{from_email}>"
-        else:
-            msg['From'] = from_email
-        
-        # Set recipient and subject
         msg['To'] = to_email
         msg['Subject'] = subject
+        from_email = from_email
+        msg['From'] = from_name
         
         # Set plain text content
         msg.set_content(body_text)
@@ -172,10 +167,10 @@ class EmailService:
                 message = EmailService._create_email_message(
                     to_email=recipient,
                     subject=subject,
-                    body_text=body_text,
-                    body_html=body_html,
                     from_name=from_name,
-                    from_email=from_email
+                    from_email=from_email,
+                    body_text=body_text,
+                    body_html=body_html
                 )
                 
                 # Send email
@@ -211,79 +206,3 @@ class EmailService:
         logger.info(f"📊 Email send complete: {successful} successful, {failed} failed")
         
         return results
-    
-    @staticmethod
-    async def send_notification_email(
-        recipient: str,
-        subject: str,
-        message: str,
-        results: List[EmailSendResult]
-    ) -> bool:
-        """
-        Send notification email about batch send results.
-        
-        Args:
-            recipient: Email to send notification to
-            subject: Notification subject
-            message: Base message
-            results: List of send results to include
-            
-        Returns:
-            bool: True if notification sent successfully
-        """
-        logger.info(f"📬 Sending notification to {recipient}")
-        
-        # Build notification body
-        successful = sum(1 for r in results if r.success)
-        failed = len(results) - successful
-        
-        body_text = f"{message}\n\n"
-        body_text += f"Summary:\n"
-        body_text += f"- Total: {len(results)}\n"
-        body_text += f"- Successful: {successful}\n"
-        body_text += f"- Failed: {failed}\n\n"
-        
-        if failed > 0:
-            body_text += "Failed emails:\n"
-            for result in results:
-                if not result.success:
-                    body_text += f"- {result.recipient}: {result.error}\n"
-        
-        # Build HTML version
-        body_html = f"""
-        <html>
-        <body>
-            <h2>Email Send Report</h2>
-            <p>{message}</p>
-            <h3>Summary</h3>
-            <ul>
-                <li>Total: {len(results)}</li>
-                <li>Successful: {successful}</li>
-                <li>Failed: {failed}</li>
-            </ul>
-        """
-        
-        if failed > 0:
-            body_html += "<h3>Failed Emails</h3><ul>"
-            for result in results:
-                if not result.success:
-                    body_html += f"<li>{result.recipient}: {result.error}</li>"
-            body_html += "</ul>"
-        
-        body_html += "</body></html>"
-        
-        try:
-            # Send notification
-            notification_results = await EmailService.send_email(
-                recipients=[recipient],
-                subject=subject,
-                body_text=body_text,
-                body_html=body_html,
-                from_name="Email Service"
-            )
-            
-            return notification_results[0].success if notification_results else False
-            
-        except Exception as e:
-            logger.error(f"Failed to send notification email: {e}")
-            return False
