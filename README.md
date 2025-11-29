@@ -32,7 +32,7 @@ exa-backend/
 │   │       ├── welcome.html         # Welcome email template
 │   │       ├── password_reset.html  # Password reset template
 │   │       ├── email_verification.html  # Email verification template
-│   │       └── notification.html    # General notification template
+│   │       └── user_notification.html    # General notification template
 │   └── tests/
 │       ├── __init__.py
 │       ├── conftest.py              # Pytest fixtures
@@ -173,9 +173,9 @@ Content-Type: application/json
    - Required: `user_name`, `verify_url`
    - Optional: `verification_code`, `expiry_hours` (default: 24)
 
-4. **notification** - General notification with custom content
-   - Required: `user_name`, `notification_title`, `message`
-   - Optional: `notification_type`, `notification_heading`, `notification_text`, `action_url`, `action_text`, `additional_info`, `items`
+4. **user_notification** - General notification with custom content
+   - Required: `user_name`, `title`, `message`
+   - Optional: `website_url`, `action_url`, `action_text`
 
 ## Environment Variables
 

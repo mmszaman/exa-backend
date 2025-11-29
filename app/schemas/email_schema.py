@@ -144,7 +144,7 @@ class SendTemplateEmailRequest(BaseModel):
     template_name: str = Field(
         ...,
         min_length=1,
-        description="Name of template to use (welcome, password_reset, email_verification, notification)"
+        description="Name of template to use (welcome, password_reset, email_verification, user_notification)"
     )
     
     context: Dict[str, Any] = Field(
@@ -169,7 +169,7 @@ class SendTemplateEmailRequest(BaseModel):
     @classmethod
     def validate_template_name(cls, v):
         """Validate template name is one of the allowed templates."""
-        allowed_templates = ['welcome', 'password_reset', 'email_verification', 'notification']
+        allowed_templates = ['welcome', 'password_reset', 'email_verification', 'user_notification']
         template_name = v.strip().lower()
         
         if template_name not in allowed_templates:

@@ -31,7 +31,7 @@ export interface SendEmailRequest {
 
 export interface SendTemplateEmailRequest {
   recipients: string[];
-  template_name: 'welcome' | 'password_reset' | 'email_verification' | 'notification';
+  template_name: 'welcome' | 'password_reset' | 'email_verification' | 'user_notification';
   subject: string;
   from_name?: string;
   from_email?: string;
@@ -156,7 +156,7 @@ export async function sendNotification(userEmail: string, userName: string, webs
   try {
     const result = await sendTemplateEmail({
       recipients: [userEmail],
-      template_name: 'notification',
+      template_name: 'user_notification',
       subject: 'Website is Online!',
       context: {
         user_name: userName,
@@ -258,7 +258,7 @@ NEXT_PUBLIC_API_URL=https://your-api-domain.com
 - `verification_code` (optional)
 - `expiry_hours` (optional, default: 24)
 
-### Notification Template
+### User Notification Template
 - `user_name` (required)
 - `title` (required)
 - `message` (required)

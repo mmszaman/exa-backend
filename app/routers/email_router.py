@@ -129,7 +129,7 @@ async def send_template_email(request: SendTemplateEmailRequest):
     - `welcome` - Welcome new users
     - `password_reset` - Password reset instructions
     - `email_verification` - Email verification link
-    - `notification` - General notification with custom content
+    - `user_notification` - General notification with custom content
     
     **Example Request:**
     ```json
@@ -160,17 +160,13 @@ async def send_template_email(request: SendTemplateEmailRequest):
     - `verification_code` - Manual verification code (optional)
     - `expiry_hours` - Link expiry time (default: 24)
     
-    **notification:**
+    **user_notification:**
     - `user_name` - User's display name
-    - `notification_title` - Title of notification
+    - `title` - Title of notification
     - `message` - Main notification message
-    - `notification_type` - Type: success, warning, error, info
-    - `notification_heading` - Colored box heading
-    - `notification_text` - Colored box text
+    - `website_url` - Website URL (optional)
     - `action_url` - Button link (optional)
     - `action_text` - Button text (optional)
-    - `additional_info` - Extra details (optional)
-    - `items` - List of items (optional, array)
     """
     logger.info(f"📧 Template email send request - Template: '{request.template_name}' to {len(request.recipients)} recipient(s)")
     logger.debug(f"Context variables: {list(request.context.keys())}")
