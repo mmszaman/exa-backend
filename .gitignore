@@ -26,6 +26,9 @@ wheels/
 # Virtual environments
 .venv/
 .env
+.env.development
+.env.production
+.env.staging
 
 # IDE
 .vscode/
