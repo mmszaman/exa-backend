@@ -171,7 +171,7 @@ class SendTemplateEmailRequest(BaseModel):
     @classmethod
     def validate_template_name(cls, v):
         """Validate template name is one of the allowed templates."""
-        allowed_templates = ['welcome', 'password_reset', 'email_verification', 'user_notification']
+        allowed_templates = ['welcome', 'password_reset', 'email_verification', 'user_notification', 'admin_notification']
         template_name = v.strip().lower()
         
         if template_name not in allowed_templates:
