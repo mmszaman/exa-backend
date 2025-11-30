@@ -43,7 +43,7 @@ async def root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Exa Backend API</title>
+        <title>ExateksAPI</title>
         <style>
             * {
                 margin: 0;
@@ -115,22 +115,9 @@ async def root():
     </head>
     <body>
         <div class="container">
-            <h1>🚀 Exa Backend</h1>
+            <h1>ExateksAPI</h1>
             <div class="status">✓ API Running</div>
-            <p>Email Service API - Ready to send emails with templates</p>
-            
-            <div class="endpoints">
-                <h3>Available Endpoints</h3>
-                <div class="endpoint">
-                    <span class="method">GET</span> /api/email/check
-                </div>
-                <div class="endpoint">
-                    <span class="method">POST</span> /api/email/send
-                </div>
-                <div class="endpoint">
-                    <span class="method">POST</span> /api/email/send-template
-                </div>
-            </div>
+            <p>Please contact <strong><i>support@exateks.com</i></strong> for assistance.</p>
         </div>
     </body>
     </html>
