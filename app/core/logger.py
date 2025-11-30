@@ -40,11 +40,22 @@ class ExaLogger:
         if logger.handlers:
             return logger
         
-        # Determine log file path
+        # Determine log file path (use /tmp on serverless platforms)
         if log_file is None:
-            log_dir = Path("logs")
-            log_dir.mkdir(exist_ok=True)  # Create logs folder if doesn't exist
-            log_file = log_dir / f"{name}.log"
+            # Check if running on Vercel or similar read-only serverless env
+            is_serverless = os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+            
+            if is_serverless:
+                log_dir = Path("/tmp/logs")
+            else:
+                log_dir = Path("logs")
+            
+            try:
+                log_dir.mkdir(exist_ok=True, parents=True)
+                log_file = log_dir / f"{name}.log"
+            except (OSError, PermissionError):
+                # If can't create log dir, skip file logging
+                log_file = None
         
         # Create formatters
         file_formatter = logging.Formatter(
@@ -56,18 +67,21 @@ class ExaLogger:
             fmt='%(levelname)s - %(name)s - %(message)s'
         )
         
-        # File handler (writes to file)
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(file_formatter)
+        # File handler (writes to file) - only if log_file is available
+        if log_file:
+            try:
+                file_handler = logging.FileHandler(log_file, encoding='utf-8')
+                file_handler.setLevel(logging.DEBUG)
+                file_handler.setFormatter(file_formatter)
+                logger.addHandler(file_handler)
+            except (OSError, PermissionError):
+                # Skip file logging if not possible
+                pass
         
         # Console handler (prints to terminal)
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)  # Only INFO+ to console
         console_handler.setFormatter(console_formatter)
-        
-        # Add handlers to logger
-        logger.addHandler(file_handler)
         logger.addHandler(console_handler)
         
         # Cache logger
