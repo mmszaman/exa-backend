@@ -5,6 +5,7 @@ Clean slate for building features from scratch.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.routers import email_router
@@ -28,6 +29,13 @@ app.add_middleware(
 
 # Register routers
 app.include_router(email_router.router)
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root to API documentation."""
+    return RedirectResponse(url="/docs")
+
 
 if __name__ == "__main__":
     import uvicorn
