@@ -1,11 +1,7 @@
-"""Configuration module - dynamic settings loader.
+"""Configuration module - settings from a single .env file.
 
-Supports multiple environment files selected via APP_ENV:
-- APP_ENV=development -> .env.development (default)
-- APP_ENV=staging     -> .env.staging (optional)
-- APP_ENV=production  -> .env.production
-
-OS environment variables always override values from files.
+Loads variables from `.env`, with OS environment variables taking precedence.
+`APP_ENV` is optional and used only for logging context.
 """
 import os
 from typing import List
@@ -13,12 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.logger import get_logger
 
 _env = os.getenv("APP_ENV", "development").lower().strip()
-_env_file_map = {
-    "development": ".env.development",
-    "staging": ".env.staging",
-    "production": ".env.production",
-}
-_selected_env_file = _env_file_map.get(_env, ".env.development")
+_selected_env_file = ".env"
 _logger = get_logger("config")
 
 
