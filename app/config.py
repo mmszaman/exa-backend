@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     # CORS - store as string, parse when needed
     FRONTEND_ORIGINS: str = "http://localhost:3000"
+    BACKEND_ORIGINS: str = "http://localhost:8000"
     
     def get_frontend_origins(self) -> List[str]:
         """Get FRONTEND_ORIGINS as a list"""
@@ -47,6 +48,13 @@ class Settings(BaseSettings):
     # Dev mode
     DEV_FAKE_EMAILS: bool = False
     DEV_FAKE_LOG: str = "sent_emails.log"
+    
+    # Database
+    DATABASE_URL: str = ""
+    
+    # Security
+    SECRET_KEY: str = ""
+
 
 settings = Settings()
 

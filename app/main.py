@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from app.config import settings
 from app.routers import email_router
+from app.routers import auth_router
 
 # Initialize FastAPI app (disable docs)
 app = FastAPI(
@@ -21,7 +22,7 @@ app = FastAPI(
     openapi_url=None,
 )
 
-# Setup CORS middleware
+# Setup CORS middleware (MUST be before routers)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_frontend_origins(),
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(auth_router.router)
 app.include_router(email_router.router)
 
 

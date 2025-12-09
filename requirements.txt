@@ -7,3 +7,9 @@ pydantic-settings
 email-validator
 httpx
 jinja2
+
+asyncpg
+sqlalchemy[asyncio]
+alembic
+passlib[bcrypt]
+python-jose[cryptography]

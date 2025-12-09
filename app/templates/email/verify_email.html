@@ -1,0 +1,22 @@
+{% extends "base_template.html" %}
+
+{% block content %}
+<h2 style="color: #4CAF50; margin-bottom: 20px;">Welcome to ExaKeep!</h2>
+
+<p>Hi <strong>{{ username }}</strong>,</p>
+
+<p>Thank you for registering with ExaKeep. To complete your registration and activate your account, please verify your email address by clicking the button below:</p>
+
+<div style="text-align: center; margin: 30px 0;">
+    <a href="{{ verification_link }}" class="button" style="display: inline-block; padding: 15px 30px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Verify Email Address</a>
+</div>
+
+<div class="divider"></div>
+
+<div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+    <p style="margin: 0;"><strong>⚠️ Important:</strong> This verification link will expire in 24 hours.</p>
+</div>
+
+<p class="text-muted">If you didn't create an account with ExaKeep, please ignore this email.</p>
+
+{% endblock %}
