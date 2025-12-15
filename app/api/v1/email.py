@@ -1,27 +1,20 @@
-"""
-Email Router - API endpoints for sending emails
-"""
 
 import asyncio
 import aiosmtplib
 from fastapi import APIRouter, HTTPException, status
-
 from app.services.email_service import EmailService
 from app.services.email_render import template_service
 from app.core.logger import get_logger
-from app.schemas.email_schema import (
-    SendEmailRequest, 
-    SendEmailResponse, 
-    EmailSendResult,
-    SendTemplateEmailRequest
-)
-from app.config import settings
+from app.schemas.email_schema import *
+from app.core.config import settings
 
 # Create router
-router = APIRouter(prefix="/api/email", tags=["email"])
+router = APIRouter()
 logger = get_logger("email_router")
 
-
+####################################################
+# POST /api/v1/email/send
+# Input: SendEmailRequest; Output: SendEmailResponse
 @router.post("/send", response_model=SendEmailResponse, status_code=status.HTTP_200_OK)
 async def send_email(request: SendEmailRequest):
     """
@@ -112,7 +105,9 @@ async def send_email(request: SendEmailRequest):
             detail=f"Failed to send email: {str(e)}"
         )
 
-
+#####################################################
+# POST /api/v1/email/send-template
+# Input: SendTemplateEmailRequest; Output: SendEmailResponse
 @router.post("/send-template", response_model=SendEmailResponse, status_code=status.HTTP_200_OK)
 async def send_template_email(request: SendTemplateEmailRequest):
     """
@@ -260,7 +255,9 @@ async def send_template_email(request: SendTemplateEmailRequest):
             detail=f"Failed to send template email: {str(e)}"
         )
 
-
+#####################################################
+# GET /api/v1/email/check
+# Output: Health status of email service
 @router.get("/check", status_code=status.HTTP_200_OK)
 async def check_email_service():
     """

@@ -1,14 +1,10 @@
-"""
-Email Service - Handles all email operations including SMTP and batch sending.
-"""
 
 import asyncio
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import List, Optional, Tuple
 import aiosmtplib
-
-from app.config import settings
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.schemas.email_schema import EmailSendResult
 
@@ -22,6 +18,9 @@ class EmailService:
     Handles connection, composition, and batch sending.
     """
     
+    # Static method to create email message
+    # Input: to_email, subject, from_name, from_email, body_text, body_html (optional)
+    # Output: EmailMessage
     @staticmethod
     def _create_email_message(
         to_email: str,
@@ -62,6 +61,9 @@ class EmailService:
         logger.debug(f"Created email message for {to_email}: {subject}")
         return msg
     
+    # Static method to send a single email
+    # Input: smtp connection, message, recipient
+    # Output: EmailSendResult
     @staticmethod
     async def _send_single_email(
         smtp: aiosmtplib.SMTP,
@@ -103,6 +105,9 @@ class EmailService:
                 sent_at=None
             )
     
+    # Public method to send email to multiple recipients
+    # Input: recipients list, subject, body_text, body_html (optional), from_name (optional), from_email (optional)
+    # Output: List of EmailSendResult
     @staticmethod
     async def send_email(
         recipients: List[str],

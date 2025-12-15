@@ -5,8 +5,8 @@ from alembic import context
 import asyncio
 
 # Import app config and models
-from app.config import settings
-from app.database import Base
+from app.core.config import settings
+from app.core.database import Base
 from app.models.user import User  # Import all models here
 from app.models.lead import Lead  # Import Lead model
 

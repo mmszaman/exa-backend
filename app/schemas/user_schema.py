@@ -2,13 +2,22 @@ from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
 
-class UserSignupRequest(BaseModel):
+
+class SignupData(BaseModel):
+    email: EmailStr
+    newsletter: bool = False
+    
+class EmailResponse(BaseModel):
+    message: str
+    email: str
+
+class UserData(BaseModel):
     verification_token: str
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=8)
     full_name: str = Field(..., min_length=1, max_length=100)
 
-class UserResponse(BaseModel):
+class User(BaseModel):
     id: int
     email: str
     username: str
@@ -20,29 +29,43 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class UserLoginRequest(BaseModel):
+class LoginData(BaseModel):
     email: EmailStr
     password: str
 
-class TokenResponse(BaseModel):
+class AuthData(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: UserResponse
+    user: User
 
-class ValidateAccessTokenRequest(BaseModel):
+class AccessToken(BaseModel):
     token: str
 
-class ForgotPasswordRequest(BaseModel):
+class UserEmail(BaseModel):
     email: EmailStr
 
-class VerifyResetTokenRequest(BaseModel):
-    token: str
+class OtpData(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=4, max_length=4)
 
-class ResetPasswordRequest(BaseModel):
-    token: str
+class OtpResponse(BaseModel):
+    valid: bool
+    message: str
+
+class ResetPasswordData(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=4, max_length=4)
     new_password: str = Field(..., min_length=8)
 
-class PasswordResetResponse(BaseModel):
+class ResetPasswordResponse(BaseModel):
     message: str
     access_token: Optional[str] = None
-    user: Optional[UserResponse] = None
+    user: Optional[User] = None
+
+
+class TokenResponse(BaseModel):
+    message: str
+    email: str
+    verification_token: str
+    is_verified: bool
+    token_expiry: datetime.datetime

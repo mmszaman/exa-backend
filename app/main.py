@@ -1,20 +1,19 @@
-"""
-Exa Backend - FastAPI Application
-Clean slate for building features from scratch.
-"""
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-from app.config import settings
-from app.routers import email_router
-from app.routers import auth_router
+from app.core.config import settings
+from app.api.v1 import auth, email
+from app.middleware.csrf import CSRFMiddleware
+from app.core.rate_limit import limiter
 
 # Initialize FastAPI app (disable docs)
+# Docs are disabled for security; use API clients like Postman or curl
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Exa Backend API",
+    description="SMB Backend API",
     version="1.0.0",
     debug=settings.DEBUG,
     docs_url=None,
@@ -22,20 +21,34 @@ app = FastAPI(
     openapi_url=None,
 )
 
+
+# Add rate limiter to app state
+# This allows access to the limiter in route handlers and middleware
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Setup CORS middleware (MUST be before routers)
+# Allows frontend to access API from different origin
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_frontend_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-CSRF-Token"],  # Allow frontend to read CSRF token
 )
 
-# Register routers
-app.include_router(auth_router.router)
-app.include_router(email_router.router)
+# Setup CSRF middleware
+# Protects against Cross-Site Request Forgery attacks
+app.add_middleware(CSRFMiddleware)
 
+# Register API v1 routers
+# Each router handles a specific set of endpoints
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
 
+# Custom root endpoint
+# Displays a welcome page with API status
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root():
     """Custom welcome page."""
@@ -125,7 +138,8 @@ async def root():
     </html>
     """
 
-
+# Run the application
+# This block is only executed when running this file directly
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

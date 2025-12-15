@@ -1,8 +1,6 @@
-"""Configuration module - settings from a single .env file.
-
-Loads variables from `.env`, with OS environment variables taking precedence.
-`APP_ENV` is optional and used only for logging context.
-"""
+# app/core/config.py
+# Configuration management for the application using Pydantic BaseSettings.
+# Loads settings from environment variables and .env file.
 import os
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,29 +10,26 @@ _env = os.getenv("APP_ENV", "development").lower().strip()
 _selected_env_file = ".env"
 _logger = get_logger("config")
 
-
+# Determine the appropriate .env file based on the environment
+# Priority: production > staging > development
 class Settings(BaseSettings):
-    """
-    Application settings loaded from environment variables.
-    See .env.example for template.
-    """
     model_config = SettingsConfigDict(
         env_file=_selected_env_file,
         case_sensitive=True,
     )
 
     # App config
-    APP_NAME: str = "Exa-Backend"
+    APP_NAME: str = "SMB-Backend"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
     # CORS - store as string, parse when needed
-    FRONTEND_ORIGINS: str = "http://localhost:3000"
+    FRONTEND_ORIGINS: str = "http://localhost:3000,http://localhost:4000"
     BACKEND_ORIGINS: str = "http://localhost:8000"
     
+    # Parse FRONTEND_ORIGINS into a list
     def get_frontend_origins(self) -> List[str]:
-        """Get FRONTEND_ORIGINS as a list"""
         return [origin.strip() for origin in self.FRONTEND_ORIGINS.split(",")]
 
     # Email configuration
@@ -54,7 +49,6 @@ class Settings(BaseSettings):
     
     # Security
     SECRET_KEY: str = ""
-
 
 settings = Settings()
 
