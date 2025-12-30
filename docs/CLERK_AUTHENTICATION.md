@@ -228,7 +228,7 @@ Response:
 ### Dependency Injection Helpers
 
 ```python
-from app.api.auth_deps import CurrentUser, CurrentUserId, RequiredTenantId
+from app.core.clerk_auth import CurrentUser, CurrentUserId, RequiredTenantId
 
 @router.get("/example")
 async def example_route(

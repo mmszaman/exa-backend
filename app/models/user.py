@@ -12,9 +12,6 @@ class UserModel(Base):
     # Clerk Integration
     clerk_user_id = Column(String(255), unique=True, index=True, nullable=False)
     
-    # Multi-tenancy
-    tenant_id = Column(String(255), index=True, nullable=True)  # Clerk organization ID
-    
     # Basic Information
     email = Column(String(255), unique=True, index=True, nullable=False)
     username = Column(String(255), unique=True, index=True, nullable=True)
@@ -52,8 +49,6 @@ class UserModel(Base):
     
     # Composite Indexes for common queries
     __table_args__ = (
-        Index('idx_tenant_active', 'tenant_id', 'is_active'),
-        Index('idx_tenant_role', 'tenant_id', 'role'),
         Index('idx_brand_source', 'brand', 'lead_source'),
     )
     

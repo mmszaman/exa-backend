@@ -8,9 +8,6 @@ class TenantModel(Base):
     # Primary Key
     id = Column(Integer, primary_key=True, index=True)
     
-    # Clerk Integration
-    clerk_org_id = Column(String(255), unique=True, index=True, nullable=False)
-    
     # Organization Information
     name = Column(String(255), nullable=False, index=True)
     slug = Column(String(255), unique=True, index=True, nullable=False)

@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.api.v1 import auth, email
-from app.api import webhooks
+from app.webhooks import clerk_router
 from app.core.rate_limit import limiter
 
 # Initialize FastAPI app (disable docs)
@@ -43,7 +43,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
 
 # Register webhook endpoints (at root level)
-app.include_router(webhooks.router, prefix="/webhook", tags=["webhooks"])
+app.include_router(clerk_router, prefix="/webhook", tags=["webhooks"])
 
 # Custom root endpoint
 # Displays a welcome page with API status

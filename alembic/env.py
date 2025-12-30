@@ -14,10 +14,7 @@ from app.core.config import settings
 from app.core.database import Base
 
 # Import all models to ensure they're registered with Base
-from app.models.user import UserModel
-from app.models.lead import LeadModel
-from app.models.session import SessionModel
-from app.models.tenant import TenantModel
+from app.models import *  # noqa: F401,F403
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

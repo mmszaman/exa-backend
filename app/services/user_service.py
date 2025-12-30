@@ -1,7 +1,4 @@
-"""
-User Service for Clerk Authentication Integration
-Handles user synchronization between Clerk and local database.
-"""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import UserModel
@@ -10,8 +7,8 @@ from typing import Optional
 
 
 class UserService:
-    """Service for managing users with Clerk authentication."""
     
+    # Get user by Clerk user ID
     @staticmethod
     async def get_user_by_clerk_id(db: AsyncSession, clerk_user_id: str) -> Optional[UserModel]:
         """Get user by Clerk user ID."""
@@ -20,6 +17,7 @@ class UserService:
         )
         return result.scalar_one_or_none()
     
+    # Get user by email
     @staticmethod
     async def get_user_by_email(db: AsyncSession, email: str) -> Optional[UserModel]:
         """Get user by email."""
@@ -28,6 +26,7 @@ class UserService:
         )
         return result.scalar_one_or_none()
     
+    # Create user from Clerk data
     @staticmethod
     async def create_from_clerk(
         db: AsyncSession,
@@ -91,6 +90,7 @@ class UserService:
         await db.refresh(user)
         return user
     
+    # Update user from Clerk data
     @staticmethod
     async def update_from_clerk(
         db: AsyncSession,
@@ -132,6 +132,7 @@ class UserService:
         await db.refresh(user)
         return user
     
+    # Delete user by Clerk user ID
     @staticmethod
     async def delete_user(db: AsyncSession, clerk_user_id: str) -> bool:
         """Delete user (called from Clerk webhook)."""
@@ -143,6 +144,7 @@ class UserService:
             return True
         return False
     
+    # Deactivate user account
     @staticmethod
     async def deactivate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
         """Deactivate user account."""
@@ -159,6 +161,7 @@ class UserService:
         await db.refresh(user)
         return user
     
+    # Activate user account
     @staticmethod
     async def activate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
         """Activate user account."""

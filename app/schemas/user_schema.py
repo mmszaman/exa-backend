@@ -5,10 +5,8 @@ from typing import Optional
 
 
 class User(BaseModel):
-    """Response model for user data."""
     id: int
     clerk_user_id: str
-    tenant_id: Optional[str] = None
     email: str
     username: Optional[str] = None
     full_name: Optional[str] = None
@@ -35,7 +33,6 @@ class User(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Model for updating user preferences."""
     newsletter: Optional[bool] = None
     full_name: Optional[str] = None
     email_notifications: Optional[bool] = None
@@ -44,11 +41,9 @@ class UserUpdate(BaseModel):
 
 
 class Session(BaseModel):
-    """Response model for session data."""
     id: int
     clerk_session_id: str
     user_id: int
-    tenant_id: Optional[str] = None
     clerk_user_id: str
     status: str
     client_id: Optional[str] = None
@@ -71,11 +66,9 @@ class Session(BaseModel):
 
 
 class SessionCreate(BaseModel):
-    """Model for creating a session."""
     clerk_session_id: str
     user_id: int
     clerk_user_id: str
-    tenant_id: Optional[str] = None
     status: str = "active"
     client_id: Optional[str] = None
     user_agent: Optional[str] = None
@@ -91,7 +84,6 @@ class SessionCreate(BaseModel):
 
 
 class SessionUpdate(BaseModel):
-    """Model for updating a session."""
     status: Optional[str] = None
     last_active_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None

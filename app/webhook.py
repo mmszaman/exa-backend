@@ -10,43 +10,10 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.services.user_service import UserService
-from app.services.tenant_service import SessionService, TenantService
+from app.services.session_service import SessionService
 
 logger = get_logger("clerk_webhooks")
 router = APIRouter()
-
-
-# Background task to retry session creation
-async def retry_session_creation(session_data: dict, max_retries: int = 3, delay: int = 2):
-    """Retry session creation if user doesn't exist yet"""
-    from app.core.database import AsyncSessionLocal
-    
-    for attempt in range(max_retries):
-        await asyncio.sleep(delay)
-        
-        async with AsyncSessionLocal() as db:
-            user = await UserService.get_user_by_clerk_id(db, session_data["clerk_user_id"])
-            if user:
-                try:
-                    await SessionService.create_or_update_session(
-                        db=db,
-                        clerk_session_id=session_data["clerk_session_id"],
-                        user_id=user.id,
-                        clerk_user_id=session_data["clerk_user_id"],
-                        tenant_id=session_data.get("tenant_id"),
-                        status=session_data["status"],
-                        client_id=session_data.get("client_id"),
-                        expires_at=session_data.get("expires_at"),
-                        clerk_metadata=session_data.get("clerk_metadata")
-                    )
-                    logger.info(f"✓ Retry succeeded: Created session {session_data['clerk_session_id']} for user {session_data['clerk_user_id']}")
-                    return
-                except Exception as e:
-                    logger.error(f"Retry {attempt + 1} failed for session {session_data['clerk_session_id']}: {str(e)}")
-            else:
-                logger.warning(f"Retry {attempt + 1}/{max_retries}: User {session_data['clerk_user_id']} still not found")
-    
-    logger.error(f"✗ All retries exhausted for session {session_data['clerk_session_id']}")
 
 
 #################################################
@@ -289,7 +256,7 @@ async def handle_clerk_webhook(
                 logger.warning(f"User not found for session: {clerk_session_id}, user: {clerk_user_id}. Scheduling retry...")
                 # Schedule background task to retry session creation
                 background_tasks.add_task(
-                    retry_session_creation,
+                    SessionService.retry_session_creation,
                     {
                         "clerk_session_id": clerk_session_id,
                         "clerk_user_id": clerk_user_id,
@@ -306,65 +273,6 @@ async def handle_clerk_webhook(
             clerk_session_id = event_data.get("id")
             await SessionService.end_session(db, clerk_session_id)
             logger.info(f"Ended session: {clerk_session_id}")
-        
-        elif event_type == "organization.created":
-            # Handle organization (tenant) creation
-            clerk_org_id = event_data.get("id")
-            name = event_data.get("name")
-            slug = event_data.get("slug")
-            logo_url = event_data.get("logo_url") or event_data.get("image_url")
-            
-            # Extract metadata for brand information
-            public_metadata = event_data.get("public_metadata", {})
-            brand = public_metadata.get("brand")
-            
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": event_data.get("private_metadata", {})
-            })
-            
-            await TenantService.create_or_update_tenant(
-                db=db,
-                clerk_org_id=clerk_org_id,
-                name=name,
-                slug=slug,
-                logo_url=logo_url,
-                brand=brand,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Created tenant: {clerk_org_id}")
-        
-        elif event_type == "organization.updated":
-            # Handle organization updates
-            clerk_org_id = event_data.get("id")
-            name = event_data.get("name")
-            slug = event_data.get("slug")
-            logo_url = event_data.get("logo_url") or event_data.get("image_url")
-            
-            public_metadata = event_data.get("public_metadata", {})
-            brand = public_metadata.get("brand")
-            
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": event_data.get("private_metadata", {})
-            })
-            
-            await TenantService.create_or_update_tenant(
-                db=db,
-                clerk_org_id=clerk_org_id,
-                name=name,
-                slug=slug,
-                logo_url=logo_url,
-                brand=brand,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Updated tenant: {clerk_org_id}")
-        
-        elif event_type == "organization.deleted":
-            # Soft delete tenant
-            clerk_org_id = event_data.get("id")
-            await TenantService.deactivate_tenant(db, clerk_org_id)
-            logger.info(f"Deactivated tenant: {clerk_org_id}")
         
         else:
             logger.info(f"Unhandled webhook event: {event_type}")

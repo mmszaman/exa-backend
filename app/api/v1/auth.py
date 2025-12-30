@@ -1,19 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-import json
-from svix.webhooks import Webhook, WebhookVerificationError
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.core.database import get_db
-from app.core.config import settings
 from app.core.logger import get_logger
 from app.services.user_service import UserService
-from app.services.tenant_service import SessionService, TenantService
-from app.api.auth_deps import CurrentUser, CurrentUserId, CurrentTenantId
+from app.core.clerk_auth import CurrentUser
 from app.schemas.user_schema import User
 
-logger = get_logger("clerk_webhooks")
+logger = get_logger("auth")
 router = APIRouter()
 
 
@@ -22,8 +17,7 @@ router = APIRouter()
 # Get current authenticated user information
 @router.get("/me", response_model=User)
 async def get_current_user_info(
-    current_user: CurrentUser,
-    tenant_id: CurrentTenantId
+    current_user: CurrentUser
 ):
     return User(
         id=current_user.id,
@@ -31,343 +25,29 @@ async def get_current_user_info(
         email=current_user.email,
         username=current_user.username,
         full_name=current_user.full_name,
+        avatar_url=current_user.avatar_url,
+        phone_number=current_user.phone_number,
         is_active=current_user.is_active,
+        role=current_user.role,
+        lead_source=current_user.lead_source,
+        brand=current_user.brand,
+        referral_code=current_user.referral_code,
+        utm_source=current_user.utm_source,
+        utm_medium=current_user.utm_medium,
+        utm_campaign=current_user.utm_campaign,
         newsletter=current_user.newsletter,
-        tenant_id=tenant_id,  # Current organization context
+        email_notifications=current_user.email_notifications,
+        marketing_emails=current_user.marketing_emails,
+        metadata=current_user.metadata,
         created_at=current_user.created_at,
-        updated_at=current_user.updated_at
+        updated_at=current_user.updated_at,
+        last_login_at=current_user.last_login_at
     )
 
 
 #################################################
-# POST /api/v1/auth/clerk-webhook
-# Handle Clerk webhook events for user synchronization
-@router.post("/clerk-webhook", status_code=status.HTTP_200_OK)
-async def handle_clerk_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    svix_id: Optional[str] = Header(None, alias="svix-id"),
-    svix_timestamp: Optional[str] = Header(None, alias="svix-timestamp"),
-    svix_signature: Optional[str] = Header(None, alias="svix-signature"),
-):  
-    logger.info("===== CLERK WEBHOOK RECEIVED =====")
-    logger.info(f"Headers - svix-id: {svix_id}, svix-timestamp: {svix_timestamp}")
-    
-    # Get the raw body for signature verification
-    body = await request.body()
-    body_str = body.decode('utf-8')
-    logger.info(f"Webhook body: {body_str[:500]}...")  # Log first 500 chars
-    
-    # Verify webhook signature
-    if not settings.CLERK_WEBHOOK_SECRET:
-        logger.error("CLERK_WEBHOOK_SECRET not configured")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Webhook secret not configured"
-        )
-    
-    # Verify the webhook signature
-    try:
-        wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
-        payload = wh.verify(body, {
-            "svix-id": svix_id,
-            "svix-timestamp": svix_timestamp,
-            "svix-signature": svix_signature,
-        })
-        logger.info("✓ Webhook signature verified successfully")
-    except WebhookVerificationError as e:
-        logger.error(f"❌ Webhook verification failed: {str(e)}")
-        # For debugging: allow webhook to proceed anyway
-        logger.warning("⚠️ Proceeding without signature verification for debugging")
-        payload = json.loads(body_str)
-    except Exception as e:
-        logger.error(f"❌ Webhook processing error: {str(e)}")
-        # For debugging: try to parse anyway
-        try:
-            payload = json.loads(body_str)
-            logger.warning("⚠️ Proceeding with parsed payload for debugging")
-        except:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Webhook error: {str(e)}"
-            )
-    
-    # Parse the event
-    event_type = payload.get("type")
-    event_data = payload.get("data", {})
-    
-    logger.info(f"Processing Clerk webhook: {event_type}")
-    
-    try:
-        if event_type == "user.created":
-            # Extract user data from Clerk webhook
-            clerk_user_id = event_data.get("id")
-            email_addresses = event_data.get("email_addresses", [])
-            primary_email = None
-            
-            # Find primary email
-            for email_obj in email_addresses:
-                if email_obj.get("id") == event_data.get("primary_email_address_id"):
-                    primary_email = email_obj.get("email_address")
-                    break
-            
-            if not primary_email and email_addresses:
-                primary_email = email_addresses[0].get("email_address")
-            
-            username = event_data.get("username")
-            first_name = event_data.get("first_name", "")
-            last_name = event_data.get("last_name", "")
-            full_name = f"{first_name} {last_name}".strip()
-            avatar_url = event_data.get("profile_image_url") or event_data.get("image_url")
-            
-            # Extract phone number
-            phone_numbers = event_data.get("phone_numbers", [])
-            primary_phone = None
-            if phone_numbers:
-                for phone_obj in phone_numbers:
-                    if phone_obj.get("id") == event_data.get("primary_phone_number_id"):
-                        primary_phone = phone_obj.get("phone_number")
-                        break
-                if not primary_phone:
-                    primary_phone = phone_numbers[0].get("phone_number")
-            
-            # Extract metadata
-            public_metadata = event_data.get("public_metadata", {})
-            private_metadata = event_data.get("private_metadata", {})
-            unsafe_metadata = event_data.get("unsafe_metadata", {})
-            
-            # Extract marketing data from metadata
-            lead_source = public_metadata.get("lead_source") or unsafe_metadata.get("lead_source")
-            brand = public_metadata.get("brand") or unsafe_metadata.get("brand")
-            referral_code = public_metadata.get("referral_code") or unsafe_metadata.get("referral_code")
-            utm_source = unsafe_metadata.get("utm_source")
-            utm_medium = unsafe_metadata.get("utm_medium")
-            utm_campaign = unsafe_metadata.get("utm_campaign")
-            
-            # Store all metadata as JSON
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": private_metadata,
-                "unsafe": unsafe_metadata
-            })
-            
-            # Create user in local database
-            await UserService.create_from_clerk(
-                db=db,
-                clerk_user_id=clerk_user_id,
-                email=primary_email,
-                username=username,
-                full_name=full_name if full_name else None,
-                avatar_url=avatar_url,
-                phone_number=primary_phone,
-                lead_source=lead_source,
-                brand=brand,
-                referral_code=referral_code,
-                utm_source=utm_source,
-                utm_medium=utm_medium,
-                utm_campaign=utm_campaign,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Created user from Clerk: {clerk_user_id}")
-        
-        elif event_type == "user.updated":
-            # Update user information
-            clerk_user_id = event_data.get("id")
-            email_addresses = event_data.get("email_addresses", [])
-            primary_email = None
-            
-            for email_obj in email_addresses:
-                if email_obj.get("id") == event_data.get("primary_email_address_id"):
-                    primary_email = email_obj.get("email_address")
-                    break
-            
-            username = event_data.get("username")
-            first_name = event_data.get("first_name", "")
-            last_name = event_data.get("last_name", "")
-            full_name = f"{first_name} {last_name}".strip()
-            avatar_url = event_data.get("profile_image_url") or event_data.get("image_url")
-            
-            # Extract phone number
-            phone_numbers = event_data.get("phone_numbers", [])
-            primary_phone = None
-            if phone_numbers:
-                for phone_obj in phone_numbers:
-                    if phone_obj.get("id") == event_data.get("primary_phone_number_id"):
-                        primary_phone = phone_obj.get("phone_number")
-                        break
-                if not primary_phone:
-                    primary_phone = phone_numbers[0].get("phone_number")
-            
-            # Extract metadata
-            public_metadata = event_data.get("public_metadata", {})
-            private_metadata = event_data.get("private_metadata", {})
-            unsafe_metadata = event_data.get("unsafe_metadata", {})
-            
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": private_metadata,
-                "unsafe": unsafe_metadata
-            })
-            
-            await UserService.update_from_clerk(
-                db=db,
-                clerk_user_id=clerk_user_id,
-                email=primary_email,
-                username=username,
-                full_name=full_name if full_name else None,
-                avatar_url=avatar_url,
-                phone_number=primary_phone,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Updated user from Clerk: {clerk_user_id}")
-        
-        elif event_type == "user.deleted":
-            # Soft delete: deactivate user instead of hard delete
-            clerk_user_id = event_data.get("id")
-            await UserService.deactivate_user(db, clerk_user_id)
-            logger.info(f"Deactivated user from Clerk: {clerk_user_id}")
-        
-        elif event_type == "session.created":
-            # Handle session creation
-            clerk_session_id = event_data.get("id")
-            clerk_user_id = event_data.get("user_id")
-            clerk_org_id = event_data.get("active_organization_id")
-            client_id = event_data.get("client_id")
-            status_val = event_data.get("status", "active")
-            
-            # Get user from database
-            user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
-            if user:
-                # Extract session metadata
-                metadata = event_data.get("last_active_at") or event_data.get("metadata", {})
-                clerk_metadata = json.dumps(metadata) if metadata else None
-                
-                expires_at = event_data.get("expire_at")
-                if expires_at:
-                    expires_at = datetime.fromtimestamp(expires_at, timezone.utc)
-                
-                await SessionService.create_or_update_session(
-                    db=db,
-                    clerk_session_id=clerk_session_id,
-                    user_id=user.id,
-                    clerk_user_id=clerk_user_id,
-                    tenant_id=clerk_org_id,
-                    status=status_val,
-                    client_id=client_id,
-                    expires_at=expires_at,
-                    clerk_metadata=clerk_metadata
-                )
-                logger.info(f"Created session: {clerk_session_id} for user: {clerk_user_id}")
-            else:
-                logger.warning(f"User not found for session: {clerk_session_id}, user: {clerk_user_id}")
-        
-        elif event_type == "session.ended" or event_type == "session.removed" or event_type == "session.revoked":
-            # Handle session end/removal/revocation
-            clerk_session_id = event_data.get("id")
-            await SessionService.end_session(db, clerk_session_id)
-            logger.info(f"Ended session: {clerk_session_id}")
-        
-        elif event_type == "organization.created":
-            # Handle organization (tenant) creation
-            clerk_org_id = event_data.get("id")
-            name = event_data.get("name")
-            slug = event_data.get("slug")
-            logo_url = event_data.get("logo_url") or event_data.get("image_url")
-            
-            # Extract metadata for brand information
-            public_metadata = event_data.get("public_metadata", {})
-            brand = public_metadata.get("brand")
-            
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": event_data.get("private_metadata", {})
-            })
-            
-            await TenantService.create_or_update_tenant(
-                db=db,
-                clerk_org_id=clerk_org_id,
-                name=name,
-                slug=slug,
-                logo_url=logo_url,
-                brand=brand,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Created tenant: {clerk_org_id}")
-        
-        elif event_type == "organization.updated":
-            # Handle organization updates
-            clerk_org_id = event_data.get("id")
-            name = event_data.get("name")
-            slug = event_data.get("slug")
-            logo_url = event_data.get("logo_url") or event_data.get("image_url")
-            
-            public_metadata = event_data.get("public_metadata", {})
-            brand = public_metadata.get("brand")
-            
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": event_data.get("private_metadata", {})
-            })
-            
-            await TenantService.create_or_update_tenant(
-                db=db,
-                clerk_org_id=clerk_org_id,
-                name=name,
-                slug=slug,
-                logo_url=logo_url,
-                brand=brand,
-                clerk_metadata=clerk_metadata
-            )
-            logger.info(f"Updated tenant: {clerk_org_id}")
-        
-        elif event_type == "organization.deleted":
-            # Soft delete tenant
-            clerk_org_id = event_data.get("id")
-            await TenantService.deactivate_tenant(db, clerk_org_id)
-            logger.info(f"Deactivated tenant: {clerk_org_id}")
-        
-        else:
-            logger.info(f"Unhandled webhook event: {event_type}")
-    
-    except Exception as e:
-        logger.error(f"Error processing webhook {event_type}: {str(e)}")
-        # Don't raise exception - return 200 to prevent Clerk retries for data errors
-        # Clerk will retry on 4xx/5xx responses
-    
-    return {"success": True, "event": event_type}
-
-
-#################################################
+# GET /api/v1/auth/health
 # Health check endpoint
 @router.get("/health")
 async def health_check():
     return {"status": "ok", "auth_provider": "clerk"}
-
-
-#################################################
-# Test endpoint to manually trigger user sync
-@router.post("/test-sync")
-async def test_sync(db: AsyncSession = Depends(get_db)):
-    """Test endpoint to manually create a test user."""
-    try:
-        test_user = await UserService.create_from_clerk(
-            db=db,
-            clerk_user_id="test_" + str(datetime.now().timestamp()),
-            email=f"test_{int(datetime.now().timestamp())}@example.com",
-            username="testuser",
-            full_name="Test User",
-            brand="smbhub",
-            lead_source="test"
-        )
-        return {
-            "success": True,
-            "message": "Test user created",
-            "user_id": test_user.id,
-            "clerk_user_id": test_user.clerk_user_id
-        }
-    except Exception as e:
-        logger.error(f"Test sync failed: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
