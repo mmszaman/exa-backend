@@ -23,7 +23,7 @@ class User(BaseModel):
     newsletter: bool = False
     email_notifications: bool = True
     marketing_emails: bool = False
-    metadata: Optional[str] = None
+    clerk_metadata: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None

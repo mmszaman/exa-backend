@@ -35,14 +35,8 @@ def get_clerk_jwks():
     return _jwks_cache
 
 # Get user from request
-# Input: Request; Output: User > user_id, org_id, session_id
+# Input: Request; Output: User > user_id, session_id
 async def get_clerk_user_from_request(request: Request) -> dict:
-    """
-    Extract and verify Clerk user information from request.
-    
-    Returns:
-        dict: {"user_id": str, "org_id": Optional[str], "session_id": Optional[str]}
-    """
     try:
         # Get authorization header or session cookie
         auth_header = request.headers.get("authorization", "")
@@ -77,7 +71,6 @@ async def get_clerk_user_from_request(request: Request) -> dict:
         
         return {
             "user_id": user_id,
-            "org_id": org_id,
             "session_id": payload.get("sid"),
         }
         
@@ -101,16 +94,6 @@ async def get_clerk_user_from_request(request: Request) -> dict:
 async def get_current_user_id(request: Request) -> str:
     clerk_user = await get_clerk_user_from_request(request)
     return clerk_user["user_id"]
-
-# Get current tenant ID from request
-# Input: Request; Output: Optional tenant_id str
-async def get_current_tenant_id(request: Request) -> Optional[str]:
-    clerk_user = await get_clerk_user_from_request(request)
-    return clerk_user.get("org_id")
-
-# Get required tenant ID from request
-# Input: Request; Output: tenant_id str or raise 403
-async def get_required_tenant_id(request: Request) -> str:
     clerk_user = await get_clerk_user_from_request(request)
     tenant_id = clerk_user.get("org_id")
     
@@ -171,6 +154,4 @@ async def get_current_user(
 
 
 CurrentUserId = Annotated[str, Depends(get_current_user_id)]
-CurrentTenantId = Annotated[Optional[str], Depends(get_current_tenant_id)]
-RequiredTenantId = Annotated[str, Depends(get_required_tenant_id)]
 CurrentUser = Annotated[UserModel, Depends(get_current_user)]

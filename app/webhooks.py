@@ -11,13 +11,14 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.services.user_service import UserService
 from app.services.session_service import SessionService
+from app.services.user_history_service import UserHistoryService
 
 logger = get_logger("clerk_webhooks")
 router = APIRouter()
 
 
 #################################################
-# GET /webhook/clerk - Health check
+# GET /webhooks/clerk - Health check
 @router.get("/clerk", status_code=status.HTTP_200_OK)
 async def webhook_health_check():
     """Health check endpoint for webhook"""
@@ -29,7 +30,7 @@ async def webhook_health_check():
 
 
 #################################################
-# POST /webhook/clerk
+# POST /webhooks/clerk
 # Handle Clerk webhook events for user synchronization
 @router.post("/clerk", status_code=status.HTTP_200_OK)
 async def handle_clerk_webhook(
@@ -64,8 +65,10 @@ async def handle_clerk_webhook(
             "svix-timestamp": svix_timestamp,
             "svix-signature": svix_signature,
         })
+
         logger.info("✓ Webhook signature verified successfully")
         logger.info(f"Event type: {payload.get('type')}")
+
     except WebhookVerificationError as e:
         logger.error(f"✗ Webhook verification failed: {str(e)}")
         raise HTTPException(
@@ -86,6 +89,8 @@ async def handle_clerk_webhook(
     logger.info(f"Processing Clerk webhook: {event_type}")
     
     try:
+        # Event: user.created
+        # Create new user in database
         if event_type == "user.created":
             # Extract user data from Clerk webhook
             clerk_user_id = event_data.get("id")
@@ -122,6 +127,13 @@ async def handle_clerk_webhook(
             public_metadata = event_data.get("public_metadata", {})
             private_metadata = event_data.get("private_metadata", {})
             unsafe_metadata = event_data.get("unsafe_metadata", {})
+
+            # Store all metadata as JSON
+            clerk_metadata = json.dumps({
+                "public": public_metadata,
+                "private": private_metadata,
+                "unsafe": unsafe_metadata
+            })
             
             # Extract marketing data from metadata
             lead_source = public_metadata.get("lead_source") or unsafe_metadata.get("lead_source")
@@ -131,15 +143,9 @@ async def handle_clerk_webhook(
             utm_medium = unsafe_metadata.get("utm_medium")
             utm_campaign = unsafe_metadata.get("utm_campaign")
             
-            # Store all metadata as JSON
-            clerk_metadata = json.dumps({
-                "public": public_metadata,
-                "private": private_metadata,
-                "unsafe": unsafe_metadata
-            })
             
-            # Create user in local database
-            await UserService.create_from_clerk(
+            # Create/Activate user in database
+            user, was_reactivated = await UserService.create_user(
                 db=db,
                 clerk_user_id=clerk_user_id,
                 email=primary_email,
@@ -155,10 +161,24 @@ async def handle_clerk_webhook(
                 utm_campaign=utm_campaign,
                 clerk_metadata=clerk_metadata
             )
-            logger.info(f"Created user from Clerk: {clerk_user_id}")
+            
+            # Log history: signed up or reactivated
+            action = "account_reactivated" if was_reactivated else "signed_up"
+            await UserHistoryService.log_action(
+                db=db,
+                user_id=user.id,
+                clerk_user_id=clerk_user_id,
+                action=action,
+                entity_type="account",
+                description=f"User {action.replace('_', ' ')} via Clerk",
+                action_metadata=clerk_metadata
+            )
+            
+            logger.info(f"{'Reactivated' if was_reactivated else 'Created'} user from Clerk: {clerk_user_id}")
         
+        # Event: user.updated
+        # Update existing user in database
         elif event_type == "user.updated":
-            # Update user information
             clerk_user_id = event_data.get("id")
             email_addresses = event_data.get("email_addresses", [])
             primary_email = None
@@ -196,7 +216,7 @@ async def handle_clerk_webhook(
                 "unsafe": unsafe_metadata
             })
             
-            await UserService.update_from_clerk(
+            await UserService.update_user(
                 db=db,
                 clerk_user_id=clerk_user_id,
                 email=primary_email,
@@ -206,13 +226,43 @@ async def handle_clerk_webhook(
                 phone_number=primary_phone,
                 clerk_metadata=clerk_metadata
             )
+            
+            # Log history for account update
+            user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
+            if user:
+                await UserHistoryService.log_action(
+                    db=db,
+                    user_id=user.id,
+                    clerk_user_id=clerk_user_id,
+                    action="account_updated",
+                    entity_type="account",
+                    description="User account updated via Clerk",
+                    action_metadata=clerk_metadata
+                )
+            
             logger.info(f"Updated user from Clerk: {clerk_user_id}")
         
+        # Event: user.deleted
+        # Deactivate user in database
         elif event_type == "user.deleted":
             # Soft delete: deactivate user instead of hard delete
             clerk_user_id = event_data.get("id")
             try:
-                await UserService.deactivate_user(db, clerk_user_id)
+                user = await UserService.deactivate_user(db, clerk_user_id)
+                
+                # Revoke all active sessions for this user
+                await SessionService.revoke_user_sessions(db, user.id)
+                
+                # Log history
+                await UserHistoryService.log_action(
+                    db=db,
+                    user_id=user.id,
+                    clerk_user_id=clerk_user_id,
+                    action="account_deactivated",
+                    entity_type="account",
+                    description="User account deactivated via Clerk"
+                )
+                
                 logger.info(f"Deactivated user from Clerk: {clerk_user_id}")
             except HTTPException as e:
                 if e.status_code == 404:
@@ -220,6 +270,8 @@ async def handle_clerk_webhook(
                 else:
                     raise
         
+        # Event: session.created
+        # Create or update session in database
         elif event_type == "session.created":
             # Handle session creation
             clerk_session_id = event_data.get("id")
@@ -245,12 +297,27 @@ async def handle_clerk_webhook(
                     clerk_session_id=clerk_session_id,
                     user_id=user.id,
                     clerk_user_id=clerk_user_id,
-                    tenant_id=clerk_org_id,
                     status=status_val,
                     client_id=client_id,
                     expires_at=expires_at,
                     clerk_metadata=clerk_metadata
                 )
+                
+                # Update last_login_at timestamp
+                logger.info(f"Updating last_login_at for user_id: {user.id}")
+                await UserService.update_last_login(db, user.id)
+                
+                # Log history: user logged in
+                await UserHistoryService.log_action(
+                    db=db,
+                    user_id=user.id,
+                    clerk_user_id=clerk_user_id,
+                    action="logged_in",
+                    description="User logged in (session created)",
+                    entity_type="session",
+                    entity_id=clerk_session_id
+                )
+                
                 logger.info(f"Created session: {clerk_session_id} for user: {clerk_user_id}")
             else:
                 logger.warning(f"User not found for session: {clerk_session_id}, user: {clerk_user_id}. Scheduling retry...")
@@ -260,7 +327,6 @@ async def handle_clerk_webhook(
                     {
                         "clerk_session_id": clerk_session_id,
                         "clerk_user_id": clerk_user_id,
-                        "tenant_id": clerk_org_id,
                         "status": status_val,
                         "client_id": client_id,
                         "expires_at": expires_at,
@@ -268,12 +334,36 @@ async def handle_clerk_webhook(
                     }
                 )
         
+        # Event: session.ended, session.removed, session.revoked
         elif event_type == "session.ended" or event_type == "session.removed" or event_type == "session.revoked":
             # Handle session end/removal/revocation
             clerk_session_id = event_data.get("id")
-            await SessionService.end_session(db, clerk_session_id)
+            clerk_user_id = event_data.get("user_id")
+            
+            # Get user first to ensure we can log history
+            user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
+            
+            # End the session
+            session = await SessionService.end_session(db, clerk_session_id)
+            
+            # Log history: user logged out (always log even if session not found)
+            if user:
+                await UserHistoryService.log_action(
+                    db=db,
+                    user_id=user.id,
+                    clerk_user_id=clerk_user_id,
+                    action="logged_out",
+                    description=f"User logged out (session {event_type.split('.')[1]})",
+                    entity_type="session",
+                    entity_id=str(session.id) if session else "unknown"
+                )
+                logger.info(f"Logged out user: {clerk_user_id}, session: {clerk_session_id}")
+            else:
+                logger.warning(f"User {clerk_user_id} not found for logout event")
+            
             logger.info(f"Ended session: {clerk_session_id}")
         
+        # Unhandled events
         else:
             logger.info(f"Unhandled webhook event: {event_type}")
     

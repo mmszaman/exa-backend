@@ -12,9 +12,8 @@ class SessionModel(Base):
     # Clerk Integration
     clerk_session_id = Column(String(255), unique=True, index=True, nullable=False)
     
-    # User & Tenant Association
+    # User Association
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
-    tenant_id = Column(String(255), index=True, nullable=True)  # Clerk organization ID
     clerk_user_id = Column(String(255), index=True, nullable=False)
     
     # Session Details
@@ -48,7 +47,6 @@ class SessionModel(Base):
     # Composite Indexes for common queries
     __table_args__ = (
         Index('idx_user_status', 'user_id', 'status'),
-        Index('idx_tenant_status', 'tenant_id', 'status'),
         Index('idx_clerk_user_status', 'clerk_user_id', 'status'),
         Index('idx_created_status', 'created_at', 'status'),
     )

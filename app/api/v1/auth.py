@@ -1,10 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
-
-from app.core.database import get_db
 from app.core.logger import get_logger
-from app.services.user_service import UserService
 from app.core.clerk_auth import CurrentUser
 from app.schemas.user_schema import User
 
@@ -38,7 +35,7 @@ async def get_current_user_info(
         newsletter=current_user.newsletter,
         email_notifications=current_user.email_notifications,
         marketing_emails=current_user.marketing_emails,
-        metadata=current_user.metadata,
+        clerk_metadata=current_user.clerk_metadata,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         last_login_at=current_user.last_login_at

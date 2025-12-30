@@ -19,7 +19,6 @@ class SessionService:
         clerk_session_id: str,
         user_id: int,
         clerk_user_id: str,
-        tenant_id: Optional[str] = None,
         status: str = "active",
         **kwargs
     ) -> SessionModel:
@@ -33,7 +32,6 @@ class SessionService:
         if session:
             # Update existing session
             session.status = status
-            session.tenant_id = tenant_id
             session.user_id = user_id
             session.clerk_user_id = clerk_user_id
             
@@ -48,7 +46,6 @@ class SessionService:
                 clerk_session_id=clerk_session_id,
                 user_id=user_id,
                 clerk_user_id=clerk_user_id,
-                tenant_id=tenant_id,
                 status=status,
                 **kwargs
             )
@@ -76,7 +73,6 @@ class SessionService:
                             clerk_session_id=session_data["clerk_session_id"],
                             user_id=user.id,
                             clerk_user_id=session_data["clerk_user_id"],
-                            tenant_id=session_data.get("tenant_id"),
                             status=session_data["status"],
                             client_id=session_data.get("client_id"),
                             expires_at=session_data.get("expires_at"),
@@ -125,3 +121,28 @@ class SessionService:
             )
         )
         return result.scalars().all()
+    
+    # Revoke all active sessions for a user
+    @staticmethod
+    async def revoke_user_sessions(db: AsyncSession, user_id: int) -> int:
+        """Revoke all active sessions for a user. Returns count of revoked sessions."""
+        result = await db.execute(
+            select(SessionModel).filter(
+                SessionModel.user_id == user_id,
+                SessionModel.status == "active"
+            )
+        )
+        sessions = result.scalars().all()
+        
+        count = 0
+        for session in sessions:
+            from datetime import datetime, timezone
+            session.status = "revoked"
+            session.ended_at = datetime.now(timezone.utc)
+            count += 1
+        
+        if count > 0:
+            await db.commit()
+            logger.info(f"Revoked {count} active session(s) for user_id: {user_id}")
+        
+        return count

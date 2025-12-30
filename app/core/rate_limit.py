@@ -4,6 +4,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from fastapi import Request
 
+
 # Function to get client identifier (IP address)
 # This will be overridden for email-specific endpoints
 def get_client_identifier(request: Request) -> str:

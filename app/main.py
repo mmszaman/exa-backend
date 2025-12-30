@@ -6,14 +6,14 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.api.v1 import auth, email
-from app.webhooks import clerk_router
+from app.webhooks import router
 from app.core.rate_limit import limiter
 
 # Initialize FastAPI app (disable docs)
 # Docs are disabled for security; use API clients like Postman or curl
 app = FastAPI(
     title=settings.APP_NAME,
-    description="SMB Backend API",
+    description="SMBHub API v1",
     version="1.0.0",
     debug=settings.DEBUG,
     docs_url=None,
@@ -27,6 +27,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
 # Setup CORS middleware (MUST be before routers)
 # Allows frontend to access API from different origin
 app.add_middleware(
@@ -37,16 +38,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register API v1 routers
+# Register API & webhook routers
 # Each router handles a specific set of endpoints
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
-
-# Register webhook endpoints (at root level)
-app.include_router(clerk_router, prefix="/webhook", tags=["webhooks"])
+app.include_router(router, prefix="/webhooks", tags=["webhooks"])
 
 # Custom root endpoint
-# Displays a welcome page with API status
+# Render a welcome page with API status
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root():
     """Custom welcome page."""
@@ -135,6 +134,7 @@ async def root():
     </body>
     </html>
     """
+
 
 # Run the application
 # This block is only executed when running this file directly

@@ -1,23 +1,28 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 from app.models.user import UserModel
 from fastapi import HTTPException, status
 from typing import Optional
+from app.core.logger import get_logger
+
+logger = get_logger("user_service")
 
 
 class UserService:
     
     # Get user by Clerk user ID
+    # Input: DB session, clerk_user_id str; Output: UserModel or None
     @staticmethod
     async def get_user_by_clerk_id(db: AsyncSession, clerk_user_id: str) -> Optional[UserModel]:
-        """Get user by Clerk user ID."""
         result = await db.execute(
             select(UserModel).where(UserModel.clerk_user_id == clerk_user_id)
         )
         return result.scalar_one_or_none()
     
+
     # Get user by email
+    # Input: DB session, email str; Output: UserModel or None
     @staticmethod
     async def get_user_by_email(db: AsyncSession, email: str) -> Optional[UserModel]:
         """Get user by email."""
@@ -26,9 +31,11 @@ class UserService:
         )
         return result.scalar_one_or_none()
     
+
     # Create user from Clerk data
+    # Input: DB session, clerk_user_id str, email str, optional fields; Output: UserModel
     @staticmethod
-    async def create_from_clerk(
+    async def create_user(
         db: AsyncSession,
         clerk_user_id: str,
         email: str,
@@ -36,7 +43,6 @@ class UserService:
         full_name: Optional[str] = None,
         avatar_url: Optional[str] = None,
         phone_number: Optional[str] = None,
-        tenant_id: Optional[str] = None,
         role: str = "member",
         lead_source: Optional[str] = None,
         brand: Optional[str] = None,
@@ -46,23 +52,54 @@ class UserService:
         utm_campaign: Optional[str] = None,
         newsletter: bool = False,
         clerk_metadata: Optional[str] = None
-    ) -> UserModel:
-        """
-        Create a user from Clerk data.
-        Used for auto-provisioning when a Clerk user first accesses the system.
-        """
-        # Check if user already exists
+    ) -> tuple[UserModel, bool]:
+        """Create user or reactivate existing user. Returns (user, was_reactivated)."""
+        # Check if user already exists by Clerk ID (handle retries)
         existing = await UserService.get_user_by_clerk_id(db, clerk_user_id)
         if existing:
-            return existing
+            # Reactivate if they were deactivated
+            if not existing.is_active:
+                from datetime import datetime, timezone
+                existing.is_active = True
+                # Update last_login_at on reactivation
+                existing.last_login_at = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(existing)
+                logger.info(f"Reactivated user: {clerk_user_id}")
+                return existing, True  # Return True for reactivation
+            return existing, False  # Already active, just return
         
-        # Check for email conflicts
+        # Check for email conflicts - if inactive user exists, reactivate with new clerk_user_id
         email_conflict = await UserService.get_user_by_email(db, email)
         if email_conflict:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A user with this email already exists"
-            )
+            if not email_conflict.is_active:
+                # User was deleted from Clerk and is re-signing up with new clerk_user_id
+                # Update clerk_user_id and reactivate
+                from datetime import datetime, timezone
+                email_conflict.clerk_user_id = clerk_user_id
+                email_conflict.is_active = True
+                email_conflict.last_login_at = datetime.now(timezone.utc)
+                # Update other fields
+                if username:
+                    email_conflict.username = username
+                if full_name:
+                    email_conflict.full_name = full_name
+                if avatar_url:
+                    email_conflict.avatar_url = avatar_url
+                if phone_number:
+                    email_conflict.phone_number = phone_number
+                if clerk_metadata:
+                    email_conflict.clerk_metadata = clerk_metadata
+                await db.commit()
+                await db.refresh(email_conflict)
+                logger.info(f"Reactivated user by email with new clerk_user_id: {email} -> {clerk_user_id}")
+                return email_conflict, True  # Return True for reactivation
+            else:
+                # Active user with this email already exists
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="A user with this email already exists"
+                )
         
         # Create new user
         user = UserModel(
@@ -72,7 +109,6 @@ class UserService:
             full_name=full_name,
             avatar_url=avatar_url,
             phone_number=phone_number,
-            tenant_id=tenant_id,
             role=role,
             lead_source=lead_source,
             brand=brand,
@@ -88,11 +124,13 @@ class UserService:
         db.add(user)
         await db.commit()
         await db.refresh(user)
-        return user
+        return user, False  # Return False for new user
     
+
     # Update user from Clerk data
+    # Input: DB session, clerk_user_id str, optional fields; Output: UserModel
     @staticmethod
-    async def update_from_clerk(
+    async def update_user(
         db: AsyncSession,
         clerk_user_id: str,
         email: Optional[str] = None,
@@ -100,10 +138,9 @@ class UserService:
         full_name: Optional[str] = None,
         avatar_url: Optional[str] = None,
         phone_number: Optional[str] = None,
-        tenant_id: Optional[str] = None,
         clerk_metadata: Optional[str] = None
     ) -> UserModel:
-        """Update user from Clerk webhook data."""
+        
         user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
         
         if not user:
@@ -123,8 +160,6 @@ class UserService:
             user.avatar_url = avatar_url
         if phone_number is not None:
             user.phone_number = phone_number
-        if tenant_id is not None:
-            user.tenant_id = tenant_id
         if clerk_metadata is not None:
             user.clerk_metadata = clerk_metadata
         
@@ -132,7 +167,9 @@ class UserService:
         await db.refresh(user)
         return user
     
+
     # Delete user by Clerk user ID
+    # Input: DB session, clerk_user_id str; Output: bool
     @staticmethod
     async def delete_user(db: AsyncSession, clerk_user_id: str) -> bool:
         """Delete user (called from Clerk webhook)."""
@@ -144,7 +181,9 @@ class UserService:
             return True
         return False
     
+
     # Deactivate user account
+    # Input: DB session, clerk_user_id str; Output: UserModel
     @staticmethod
     async def deactivate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
         """Deactivate user account."""
@@ -161,7 +200,9 @@ class UserService:
         await db.refresh(user)
         return user
     
+
     # Activate user account
+    # Input: DB session, clerk_user_id str; Output: UserModel
     @staticmethod
     async def activate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
         """Activate user account."""
@@ -177,3 +218,26 @@ class UserService:
         await db.commit()
         await db.refresh(user)
         return user
+    
+
+    # Update last login timestamp
+    # Input: DB session, user_id int; Output: None
+    @staticmethod
+    async def update_last_login(db: AsyncSession, user_id: int) -> None:
+        """Update user's last login timestamp."""
+        from datetime import datetime, timezone
+        from app.core.logger import get_logger
+        logger = get_logger("user_service")
+        
+        result = await db.execute(
+            select(UserModel).where(UserModel.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if user:
+            user.last_login_at = datetime.now(timezone.utc)
+            await db.commit()
+            await db.refresh(user)
+            logger.info(f"Updated last_login_at for user_id: {user_id} to {user.last_login_at}")
+        else:
+            logger.warning(f"User not found for updating last_login_at: user_id={user_id}")
