@@ -1,6 +1,3 @@
-"""
-Exa Logger - Write logs to different files for different modules.
-"""
 
 import logging
 import os
@@ -9,25 +6,12 @@ from pathlib import Path
 
 
 class ExaLogger:
-    """
-    Custom logger that writes to specific log files.
-    Each module can have its own log file for easy debugging.
-    """
-    
+
     _loggers = {}  # Cache loggers to avoid duplicates
     
     @staticmethod
     def get_logger(name: str, log_file: str = None) -> logging.Logger:
-        """
-        Get or create a logger that writes to a specific file.
-        
-        Args:
-            name: Logger name (usually module name like 'email_service')
-            log_file: File path to write logs (default: logs/{name}.log)
-            
-        Returns:
-            logging.Logger: Configured logger instance
-        """
+
         # Use cached logger if already created
         if name in ExaLogger._loggers:
             return ExaLogger._loggers[name]
@@ -92,12 +76,4 @@ class ExaLogger:
 
 # Convenience function for quick use
 def get_logger(name: str, log_file: str = None) -> logging.Logger:
-    """
-    Quick function to get a logger.
-    
-    Usage:
-        from app.core.logger import get_logger
-        logger = get_logger('email_service')
-        logger.info('Email sent successfully')
-    """
     return ExaLogger.get_logger(name, log_file)

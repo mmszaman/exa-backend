@@ -47,6 +47,11 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = ""
     
+    # Clerk Authentication
+    CLERK_SECRET_KEY: str = ""
+    CLERK_PUBLISHABLE_KEY: str = ""
+    CLERK_WEBHOOK_SECRET: str = ""
+    
     # Security
     SECRET_KEY: str = ""
 

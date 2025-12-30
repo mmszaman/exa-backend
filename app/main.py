@@ -6,7 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.api.v1 import auth, email
-from app.middleware.csrf import CSRFMiddleware
+from app.api import webhooks
 from app.core.rate_limit import limiter
 
 # Initialize FastAPI app (disable docs)
@@ -35,17 +35,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-CSRF-Token"],  # Allow frontend to read CSRF token
 )
-
-# Setup CSRF middleware
-# Protects against Cross-Site Request Forgery attacks
-app.add_middleware(CSRFMiddleware)
 
 # Register API v1 routers
 # Each router handles a specific set of endpoints
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(email.router, prefix="/api/v1/email", tags=["email"])
+
+# Register webhook endpoints (at root level)
+app.include_router(webhooks.router, prefix="/webhook", tags=["webhooks"])
 
 # Custom root endpoint
 # Displays a welcome page with API status

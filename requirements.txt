@@ -8,9 +8,11 @@ email-validator
 httpx
 jinja2
 slowapi
+requests
 
 asyncpg
 sqlalchemy[asyncio]
 alembic
-passlib[bcrypt]
-python-jose[cryptography]
+clerk-backend-api
+svix
+pyjwt

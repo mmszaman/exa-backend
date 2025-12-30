@@ -2,29 +2,48 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
+# Base class for models - defined first to avoid circular imports
+Base = declarative_base()
+
 # Create async engine with connection pool settings
-# Adjust pool_size and max_overflow as needed
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    future=True,
-    pool_size=20,
-    max_overflow=0,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-)
+# Only create if DATABASE_URL is configured with async driver
+if settings.DATABASE_URL and "postgresql" in settings.DATABASE_URL:
+    # Ensure async driver for runtime and clean up incompatible parameters
+    async_url = settings.DATABASE_URL
+    
+    # Replace driver with asyncpg
+    if "postgresql://" in async_url and "asyncpg" not in async_url:
+        async_url = async_url.replace("postgresql://", "postgresql+asyncpg://")
+    
+    # Remove incompatible parameters for asyncpg (sslmode, channel_binding)
+    # asyncpg uses ssl='require' instead
+    if "sslmode=" in async_url:
+        # Remove sslmode and channel_binding parameters
+        async_url = async_url.split("?")[0] + "?ssl=require"
+    
+    engine = create_async_engine(
+        async_url,
+        echo=settings.DEBUG,
+        future=True,
+        pool_size=20,
+        max_overflow=0,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
+else:
+    # Fallback engine for when DB is not configured (e.g., during migrations)
+    engine = None
 
 # Create session factory
 # expire_on_commit=False to prevent attributes from being expired after commit
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
-)
-
-# Base class for models
-# Declarative base for ORM models
-Base = declarative_base()
+if engine:
+    AsyncSessionLocal = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False
+    )
+else:
+    AsyncSessionLocal = None
 
 # Dependency for getting database session
 # Async generator that yields a database session

@@ -1,323 +1,176 @@
+"""
+User Service for Clerk Authentication Integration
+Handles user synchronization between Clerk and local database.
+"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import UserModel
-from app.models.lead import LeadModel
-from app.core.security import get_password_hash, verify_password, generate_verification_token, get_token_expiry
 from fastapi import HTTPException, status
-from datetime import datetime, timezone
+from typing import Optional
 
-from app.schemas.user_schema import *
-
-from app.core.security import (
-    generate_verification_token,
-    get_token_expiry,
-    get_password_hash
-)
 
 class UserService:
-
-    # Create lead with email and send verification token
-    # param: signup data; returns: LeadModel
-    @staticmethod
-    async def create_lead_srv (db: AsyncSession, signup_data: SignupData) -> LeadModel:
-        email = signup_data.email.lower()
-        
-        # Check if email already exists in users table
-        user_result = await db.execute(select(UserModel).where(UserModel.email == email))
-        if user_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        
-        # Check if lead already exists
-        lead_result = await db.execute(select(LeadModel).where(LeadModel.email == email))
-        existing_lead = lead_result.scalar_one_or_none()
-        
-        if existing_lead:
-            # If lead exists but not verified, update token
-            if not existing_lead.is_verified:
-                existing_lead.verification_token = generate_verification_token()
-                existing_lead.token_expiry = get_token_expiry(24)
-                existing_lead.newsletter = signup_data.newsletter
-                await db.commit()
-                await db.refresh(existing_lead)
-                return existing_lead
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Email already verified. Please complete registration."
-                )
-        
-        # Create new lead
-        lead = LeadModel(
-            email=email,
-            verification_token=generate_verification_token(),
-            token_expiry=get_token_expiry(24),
-            newsletter=signup_data.newsletter
-        )
-        
-        db.add(lead)
-        await db.commit()
-        await db.refresh(lead)
-        return lead
-
-    #Verify email with token and mark as verified
-    # param: token only; returns: LeadModel
-    @staticmethod
-    async def verify_lead_email_srv (db: AsyncSession, token: str) -> LeadModel:
-        """Verify email with token."""
-        result = await db.execute(
-            select(LeadModel).where(LeadModel.verification_token == token)
-        )
-        lead = result.scalar_one_or_none()
-        
-        if not lead:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid verification token"
-            )
-        
-        # Check if already verified
-        if lead.is_verified:
-            return lead
-        
-        # Check if token expired
-        if lead.token_expiry < datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Verification token has expired. Please request a new one."
-            )
-        
-        # Mark as verified
-        lead.is_verified = True
-        await db.commit()
-        await db.refresh(lead)
-        return lead   
+    """Service for managing users with Clerk authentication."""
     
-    # Resend verification email by generating new token
-    # param: email only; returns: LeadModel
     @staticmethod
-    async def resend_lead_verification_srv (db: AsyncSession, email: str) -> LeadModel:
-        """Resend verification email by generating new token."""
-        email = email.lower()
-        
-        result = await db.execute(select(LeadModel).where(LeadModel.email == email))
-        lead = result.scalar_one_or_none()
-        
-        if not lead:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Email not found. Please start signup process."
-            )
-        
-        if lead.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already verified. Please complete registration."
-            )
-        
-        # Generate new token
-        lead.verification_token = generate_verification_token()
-        lead.token_expiry = get_token_expiry(24)
-        
-        await db.commit()
-        await db.refresh(lead)
-        return lead
-
-    # Check token, verification status, user status > create user > delete lead
-    # param: signup data and url token
-    @staticmethod
-    async def user_signup_srv (db: AsyncSession, user_data: UserData, url_token: str) -> UserModel:
-        """Complete signup by creating user after email verification."""
-        # Verify token and get lead
+    async def get_user_by_clerk_id(db: AsyncSession, clerk_user_id: str) -> Optional[UserModel]:
+        """Get user by Clerk user ID."""
         result = await db.execute(
-            select(LeadModel).where(LeadModel.verification_token == user_data.verification_token)
+            select(UserModel).where(UserModel.clerk_user_id == clerk_user_id)
         )
-        lead = result.scalar_one_or_none()
-        
-        if not lead:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid verification token"
-            )
-        
-        # Validate URL token matches lead token
-        if url_token != lead.verification_token:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Token mismatch. URL token does not match lead token."
-            )
-        
-        if not lead.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email not verified. Please verify your email first."
-            )
-        
-        # Check if token expired
-        if lead.token_expiry < datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Verification token has expired. Please request a new one."
-            )
-        
-        # Check if username already taken
-        username_result = await db.execute(
-            select(UserModel).where(UserModel.username == user_data.username)
-        )
-        if username_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
-            )
-        
-        # Check if email already in users (extra safety)
-        user_result = await db.execute(
-            select(UserModel).where(UserModel.email == lead.email)
-        )
-        if user_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User already exists with this email"
-            )
-        
-        # Create user (already verified since email was verified)
-        user = UserModel(
-            email=lead.email,
-            username=user_data.username,
-            hashed_password=get_password_hash(user_data.password),
-            full_name=user_data.full_name,
-            is_verified=True,  # Already verified via lead
-            newsletter=lead.newsletter  # Transfer newsletter preference from lead
-        )
-        db.add(user)
-        await db.delete(lead)
-        await db.commit()
-        await db.refresh(user)
-        return user
-
-    # Authenticate user by email and password
-    # param: email and password; returns: UserModel (only if active and verified)
-    @staticmethod
-    async def authenticate_user_srv (db: AsyncSession, email: str, password: str) -> UserModel:
-        """Authenticate user by email and password."""
-        result = await db.execute(select(UserModel).where(UserModel.email == email))
-        user = result.scalar_one_or_none()
-        
-        if not user or not verify_password(password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is inactive"
-            )
-        
-        return user
-
-    # Get user by email
-    # param: user_email only; returns: UserModel
-    @staticmethod
-    async def get_user_by_email_srv(db: AsyncSession, user_email: str) -> UserModel:
-        result = await db.execute(select(UserModel).where(UserModel.email == user_email))
         return result.scalar_one_or_none()
-
-    # Request password reset by generating OTP
-    # param: email only; returns: UserModel
+    
     @staticmethod
-    async def request_password_reset_srv(db: AsyncSession, email: str) -> UserModel:
-        """Generate password reset OTP for user."""
-        from app.core.security import generate_otp, get_otp_expiry
+    async def get_user_by_email(db: AsyncSession, email: str) -> Optional[UserModel]:
+        """Get user by email."""
+        result = await db.execute(
+            select(UserModel).where(UserModel.email == email.lower())
+        )
+        return result.scalar_one_or_none()
+    
+    @staticmethod
+    async def create_from_clerk(
+        db: AsyncSession,
+        clerk_user_id: str,
+        email: str,
+        username: Optional[str] = None,
+        full_name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        phone_number: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        role: str = "member",
+        lead_source: Optional[str] = None,
+        brand: Optional[str] = None,
+        referral_code: Optional[str] = None,
+        utm_source: Optional[str] = None,
+        utm_medium: Optional[str] = None,
+        utm_campaign: Optional[str] = None,
+        newsletter: bool = False,
+        clerk_metadata: Optional[str] = None
+    ) -> UserModel:
+        """
+        Create a user from Clerk data.
+        Used for auto-provisioning when a Clerk user first accesses the system.
+        """
+        # Check if user already exists
+        existing = await UserService.get_user_by_clerk_id(db, clerk_user_id)
+        if existing:
+            return existing
         
-        result = await db.execute(select(UserModel).where(UserModel.email == email))
-        user = result.scalar_one_or_none()
+        # Check for email conflicts
+        email_conflict = await UserService.get_user_by_email(db, email)
+        if email_conflict:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A user with this email already exists"
+            )
+        
+        # Create new user
+        user = UserModel(
+            clerk_user_id=clerk_user_id,
+            email=email.lower(),
+            username=username or email.split('@')[0],
+            full_name=full_name,
+            avatar_url=avatar_url,
+            phone_number=phone_number,
+            tenant_id=tenant_id,
+            role=role,
+            lead_source=lead_source,
+            brand=brand,
+            referral_code=referral_code,
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
+            is_active=True,
+            newsletter=newsletter,
+            clerk_metadata=clerk_metadata
+        )
+        
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+    
+    @staticmethod
+    async def update_from_clerk(
+        db: AsyncSession,
+        clerk_user_id: str,
+        email: Optional[str] = None,
+        username: Optional[str] = None,
+        full_name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        phone_number: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        clerk_metadata: Optional[str] = None
+    ) -> UserModel:
+        """Update user from Clerk webhook data."""
+        user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
         
         if not user:
-            # Don't reveal if email exists - security best practice
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="If this email exists, an OTP has been sent"
+                detail="User not found"
             )
         
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is inactive"
-            )
-        
-        # Generate 4-digit OTP (valid for 10 minutes)
-        user.reset_otp = generate_otp()
-        user.reset_otp_expiry = get_otp_expiry(minutes=10)
+        # Update fields if provided
+        if email is not None:
+            user.email = email.lower()
+        if username is not None:
+            user.username = username
+        if full_name is not None:
+            user.full_name = full_name
+        if avatar_url is not None:
+            user.avatar_url = avatar_url
+        if phone_number is not None:
+            user.phone_number = phone_number
+        if tenant_id is not None:
+            user.tenant_id = tenant_id
+        if clerk_metadata is not None:
+            user.clerk_metadata = clerk_metadata
         
         await db.commit()
         await db.refresh(user)
         return user
     
-    # Verify OTP only
-    # param: email and otp; returns: UserModel
     @staticmethod
-    async def verify_otp_srv(db: AsyncSession, email: str, otp: str) -> UserModel:
-        """Verify OTP only."""
-        result = await db.execute(select(UserModel).where(UserModel.email == email))
-        user = result.scalar_one_or_none()
+    async def delete_user(db: AsyncSession, clerk_user_id: str) -> bool:
+        """Delete user (called from Clerk webhook)."""
+        user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
+        
+        if user:
+            await db.delete(user)
+            await db.commit()
+            return True
+        return False
+    
+    @staticmethod
+    async def deactivate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
+        """Deactivate user account."""
+        user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
         
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Invalid email or OTP"
+                detail="User not found"
             )
         
-        if not user.reset_otp:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No OTP request found. Please request a new OTP"
-            )
-        
-        # Check if OTP expired
-        if user.reset_otp_expiry < datetime.now(timezone.utc):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP has expired. Please request a new one"
-            )
-        
-        # Verify OTP
-        if user.reset_otp != otp:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP"
-            )
-        
-        return user
-
-    # Reset password using OTP
-    # param: email, otp, new_password; returns: UserModel
-    @staticmethod
-    async def reset_password_with_otp_srv(db: AsyncSession, email: str, otp: str, new_password: str) -> UserModel:
-        """Reset user password using OTP."""
-        # Verify OTP first
-        user = await UserService.verify_otp_srv(db, email, otp)
-        
-        # Update password
-        user.hashed_password = get_password_hash(new_password)
-        
-        # Clear OTP
-        user.reset_otp = None
-        user.reset_otp_expiry = None
-        
+        user.is_active = False
         await db.commit()
         await db.refresh(user)
         return user
-
-    # Update user's refresh token
-    # param: user_email and refresh_token; returns: None
+    
     @staticmethod
-    async def update_refresh_token_srv(db: AsyncSession, user_email: str, refresh_token: Optional[str]) -> None:
-        """Update user's refresh token."""
-        user = await UserService.get_user_by_email_srv(db, user_email)
-        if user:
-            user.refresh_token = refresh_token
-            await db.commit()
+    async def activate_user(db: AsyncSession, clerk_user_id: str) -> UserModel:
+        """Activate user account."""
+        user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user.is_active = True
+        await db.commit()
+        await db.refresh(user)
+        return user

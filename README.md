@@ -1,53 +1,79 @@
-# Exa Backend - FastAPI
+# SMB Hub Backend - Multi-Tenant SaaS Platform
 
-Professional, scalable backend following FastAPI best practices with email service capabilities.
+Professional, scalable FastAPI backend with **Clerk authentication** and multi-tenant architecture.
 
-## Folder Structure
+## 🚀 Quick Start
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure Clerk (see CLERK_SETUP_CHECKLIST.md)
+cp .env.example .env
+# Add your Clerk keys to .env
+
+# 3. Run database migrations
+alembic upgrade head
+
+# 4. Start server
+python server.py
+```
+
+## 🔐 Authentication
+
+This backend uses **Clerk** for authentication with built-in multi-tenancy support.
+
+- ✅ Email/password + social OAuth
+- ✅ Organization-based multi-tenancy
+- ✅ Automatic user provisioning via webhooks
+- ✅ JWT token verification
+
+**Setup Guide**: See [docs/CLERK_AUTHENTICATION.md](docs/CLERK_AUTHENTICATION.md)  
+**Quick Checklist**: See [CLERK_SETUP_CHECKLIST.md](CLERK_SETUP_CHECKLIST.md)
+
+## 📁 Folder Structure
 
 ```
-exa-backend/
+smb-backend/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                      # App initialization & middleware
-│   ├── config.py                    # Environment settings
+│   ├── api/
+│   │   ├── deps.py                  # Auth dependencies (CurrentUser, etc.)
+│   │   └── v1/
+│   │       ├── auth.py              # Clerk webhooks & user endpoints
+│   │       └── email.py             # Email sending
 │   ├── core/
-│   │   ├── __init__.py
-│   │   └── logger.py                # Logging setup
+│   │   ├── config.py                # Environment settings (incl. Clerk)
+│   │   ├── database.py              # Database connection
+│   │   ├── logger.py                # Logging setup
+│   │   ├── rate_limit.py            # Rate limiting
+│   │   └── security.py              # Utility functions
+│   ├── middleware/
+│   │   ├── clerk_auth.py            # Clerk JWT verification
+│   │   └── csrf.py                  # CSRF protection
+│   ├── models/
+│   │   ├── user.py                  # User model (Clerk-integrated)
+│   │   └── lead.py                  # Marketing leads
 │   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── notification.py          # Notification models
-│   │   └── email_schema.py          # Email request/response models
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── health.py                # Health check endpoint
-│   │   ├── notifications.py         # Notification endpoints
-│   │   └── email_router.py          # Email sending endpoints
+│   │   ├── user_schema.py           # User API schemas
+│   │   └── email_schema.py          # Email schemas
 │   ├── services/
-│   │   ├── __init__.py
-│   │   ├── email_service.py         # SMTP email sending logic
-│   │   └── email_render.py          # Template rendering service
-│   ├── templates/
-│   │   └── email/
-│   │       ├── base_template.html   # Base email layout
-│   │       ├── welcome.html         # Welcome email template
-│   │       ├── password_reset.html  # Password reset template
-│   │       ├── email_verification.html  # Email verification template
-│   │       └── user_notification.html    # General notification template
-│   └── tests/
-│       ├── __init__.py
-│       ├── conftest.py              # Pytest fixtures
-│       ├── test_notifications.py    # Notification tests
-│       └── test_api.py              # Email API tests
-├── .env.example
-├── requirements.txt
-├── requirements-dev.txt
-├── run.py                           # Entry point
-└── README.md
+│   │   ├── user_service.py          # User sync with Clerk
+│   │   ├── email_service.py         # SMTP email sending
+│   │   └── email_render.py          # Template rendering
+│   └── templates/
+│       └── email/                   # Email templates
+├── alembic/
+│   └── versions/                    # Database migrations
+├── docs/
+│   ├── CLERK_AUTHENTICATION.md      # Full Clerk setup guide
+│   └── ...
+├── .copilot/
+│   └── copilot-context.md           # Project architecture rules
+├── .env.example                     # Environment template
+├── requirements.txt                 # Python dependencies
+├── CLERK_SETUP_CHECKLIST.md         # Setup checklist
+└── server.py                        # Entry point
 ```
-
-## Why This Structure?
-
-- **Modular** — Each feature gets its own router; easy to add new endpoints
 - **Testable** — Services can be mocked; conftest provides fixtures
 - **Maintainable** — Clear separation of concerns (schemas, logic, endpoints)
 - **Scalable** — Add new routers (users, payments, etc.) without touching existing code

@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Header, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import json
+import asyncio
 from svix.webhooks import Webhook, WebhookVerificationError
 from datetime import datetime, timezone
 
@@ -10,41 +11,63 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.services.user_service import UserService
 from app.services.tenant_service import SessionService, TenantService
-from app.api.auth_deps import CurrentUser, CurrentUserId, CurrentTenantId
-from app.schemas.user_schema import User
 
 logger = get_logger("clerk_webhooks")
 router = APIRouter()
 
 
-#################################################
-# GET /api/v1/auth/me
-# Get current authenticated user information
-@router.get("/me", response_model=User)
-async def get_current_user_info(
-    current_user: CurrentUser,
-    tenant_id: CurrentTenantId
-):
-    return User(
-        id=current_user.id,
-        clerk_user_id=current_user.clerk_user_id,
-        email=current_user.email,
-        username=current_user.username,
-        full_name=current_user.full_name,
-        is_active=current_user.is_active,
-        newsletter=current_user.newsletter,
-        tenant_id=tenant_id,  # Current organization context
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at
-    )
+# Background task to retry session creation
+async def retry_session_creation(session_data: dict, max_retries: int = 3, delay: int = 2):
+    """Retry session creation if user doesn't exist yet"""
+    from app.core.database import AsyncSessionLocal
+    
+    for attempt in range(max_retries):
+        await asyncio.sleep(delay)
+        
+        async with AsyncSessionLocal() as db:
+            user = await UserService.get_user_by_clerk_id(db, session_data["clerk_user_id"])
+            if user:
+                try:
+                    await SessionService.create_or_update_session(
+                        db=db,
+                        clerk_session_id=session_data["clerk_session_id"],
+                        user_id=user.id,
+                        clerk_user_id=session_data["clerk_user_id"],
+                        tenant_id=session_data.get("tenant_id"),
+                        status=session_data["status"],
+                        client_id=session_data.get("client_id"),
+                        expires_at=session_data.get("expires_at"),
+                        clerk_metadata=session_data.get("clerk_metadata")
+                    )
+                    logger.info(f"✓ Retry succeeded: Created session {session_data['clerk_session_id']} for user {session_data['clerk_user_id']}")
+                    return
+                except Exception as e:
+                    logger.error(f"Retry {attempt + 1} failed for session {session_data['clerk_session_id']}: {str(e)}")
+            else:
+                logger.warning(f"Retry {attempt + 1}/{max_retries}: User {session_data['clerk_user_id']} still not found")
+    
+    logger.error(f"✗ All retries exhausted for session {session_data['clerk_session_id']}")
 
 
 #################################################
-# POST /api/v1/auth/clerk-webhook
+# GET /webhook/clerk - Health check
+@router.get("/clerk", status_code=status.HTTP_200_OK)
+async def webhook_health_check():
+    """Health check endpoint for webhook"""
+    return {
+        "status": "ok",
+        "message": "Clerk webhook endpoint is ready",
+        "method": "POST"
+    }
+
+
+#################################################
+# POST /webhook/clerk
 # Handle Clerk webhook events for user synchronization
-@router.post("/clerk-webhook", status_code=status.HTTP_200_OK)
+@router.post("/clerk", status_code=status.HTTP_200_OK)
 async def handle_clerk_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     svix_id: Optional[str] = Header(None, alias="svix-id"),
     svix_timestamp: Optional[str] = Header(None, alias="svix-timestamp"),
@@ -75,22 +98,19 @@ async def handle_clerk_webhook(
             "svix-signature": svix_signature,
         })
         logger.info("✓ Webhook signature verified successfully")
+        logger.info(f"Event type: {payload.get('type')}")
     except WebhookVerificationError as e:
-        logger.error(f"❌ Webhook verification failed: {str(e)}")
-        # For debugging: allow webhook to proceed anyway
-        logger.warning("⚠️ Proceeding without signature verification for debugging")
-        payload = json.loads(body_str)
+        logger.error(f"✗ Webhook verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook signature"
+        )
     except Exception as e:
-        logger.error(f"❌ Webhook processing error: {str(e)}")
-        # For debugging: try to parse anyway
-        try:
-            payload = json.loads(body_str)
-            logger.warning("⚠️ Proceeding with parsed payload for debugging")
-        except:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Webhook error: {str(e)}"
-            )
+        logger.error(f"✗ Webhook processing error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Webhook error: {str(e)}"
+        )
     
     # Parse the event
     event_type = payload.get("type")
@@ -224,8 +244,14 @@ async def handle_clerk_webhook(
         elif event_type == "user.deleted":
             # Soft delete: deactivate user instead of hard delete
             clerk_user_id = event_data.get("id")
-            await UserService.deactivate_user(db, clerk_user_id)
-            logger.info(f"Deactivated user from Clerk: {clerk_user_id}")
+            try:
+                await UserService.deactivate_user(db, clerk_user_id)
+                logger.info(f"Deactivated user from Clerk: {clerk_user_id}")
+            except HTTPException as e:
+                if e.status_code == 404:
+                    logger.warning(f"User {clerk_user_id} not found in database, may have been deleted already or never created")
+                else:
+                    raise
         
         elif event_type == "session.created":
             # Handle session creation
@@ -235,17 +261,18 @@ async def handle_clerk_webhook(
             client_id = event_data.get("client_id")
             status_val = event_data.get("status", "active")
             
+            # Extract session metadata (do this before user check)
+            metadata = event_data.get("last_active_at") or event_data.get("metadata", {})
+            clerk_metadata = json.dumps(metadata) if metadata else None
+            
+            # Convert expires_at timestamp (Clerk sends milliseconds)
+            expires_at = event_data.get("expire_at")
+            if expires_at:
+                expires_at = datetime.fromtimestamp(expires_at / 1000, timezone.utc)
+            
             # Get user from database
             user = await UserService.get_user_by_clerk_id(db, clerk_user_id)
             if user:
-                # Extract session metadata
-                metadata = event_data.get("last_active_at") or event_data.get("metadata", {})
-                clerk_metadata = json.dumps(metadata) if metadata else None
-                
-                expires_at = event_data.get("expire_at")
-                if expires_at:
-                    expires_at = datetime.fromtimestamp(expires_at, timezone.utc)
-                
                 await SessionService.create_or_update_session(
                     db=db,
                     clerk_session_id=clerk_session_id,
@@ -259,7 +286,20 @@ async def handle_clerk_webhook(
                 )
                 logger.info(f"Created session: {clerk_session_id} for user: {clerk_user_id}")
             else:
-                logger.warning(f"User not found for session: {clerk_session_id}, user: {clerk_user_id}")
+                logger.warning(f"User not found for session: {clerk_session_id}, user: {clerk_user_id}. Scheduling retry...")
+                # Schedule background task to retry session creation
+                background_tasks.add_task(
+                    retry_session_creation,
+                    {
+                        "clerk_session_id": clerk_session_id,
+                        "clerk_user_id": clerk_user_id,
+                        "tenant_id": clerk_org_id,
+                        "status": status_val,
+                        "client_id": client_id,
+                        "expires_at": expires_at,
+                        "clerk_metadata": clerk_metadata
+                    }
+                )
         
         elif event_type == "session.ended" or event_type == "session.removed" or event_type == "session.revoked":
             # Handle session end/removal/revocation
@@ -330,44 +370,12 @@ async def handle_clerk_webhook(
             logger.info(f"Unhandled webhook event: {event_type}")
     
     except Exception as e:
-        logger.error(f"Error processing webhook {event_type}: {str(e)}")
-        # Don't raise exception - return 200 to prevent Clerk retries for data errors
-        # Clerk will retry on 4xx/5xx responses
-    
-    return {"success": True, "event": event_type}
-
-
-#################################################
-# Health check endpoint
-@router.get("/health")
-async def health_check():
-    return {"status": "ok", "auth_provider": "clerk"}
-
-
-#################################################
-# Test endpoint to manually trigger user sync
-@router.post("/test-sync")
-async def test_sync(db: AsyncSession = Depends(get_db)):
-    """Test endpoint to manually create a test user."""
-    try:
-        test_user = await UserService.create_from_clerk(
-            db=db,
-            clerk_user_id="test_" + str(datetime.now().timestamp()),
-            email=f"test_{int(datetime.now().timestamp())}@example.com",
-            username="testuser",
-            full_name="Test User",
-            brand="smbhub",
-            lead_source="test"
-        )
-        return {
-            "success": True,
-            "message": "Test user created",
-            "user_id": test_user.id,
-            "clerk_user_id": test_user.clerk_user_id
-        }
-    except Exception as e:
-        logger.error(f"Test sync failed: {str(e)}")
+        logger.error(f"Error processing webhook {event_type}: {str(e)}", exc_info=True)
+        # Raise exception so Clerk knows the webhook failed
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Error processing {event_type}: {str(e)}"
         )
+    
+    logger.info(f"✓ Successfully processed {event_type}")
+    return {"success": True, "event": event_type}

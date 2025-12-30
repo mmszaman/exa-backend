@@ -1,14 +1,23 @@
 from logging.config import fileConfig
-from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import pool, create_engine
 from alembic import context
-import asyncio
+import os
+import sys
 
-# Import app config and models
+# Add parent directory to path to import app modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# Import app config
 from app.core.config import settings
+
+# Import Base from database module (this is the Base our models use)
 from app.core.database import Base
-from app.models.user import User  # Import all models here
-from app.models.lead import Lead  # Import Lead model
+
+# Import all models to ensure they're registered with Base
+from app.models.user import UserModel
+from app.models.lead import LeadModel
+from app.models.session import SessionModel
+from app.models.tenant import TenantModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -60,29 +69,27 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode (async)."""
     
     configuration = config.get_section(config.config_ini_section)
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
     
-    connectable = create_async_engine(
-        configuration["sqlalchemy.url"],
+    # Convert async URL to sync URL for Alembic
+    sync_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+    configuration["sqlalchemy.url"] = sync_url
+    
+    from sqlalchemy import create_engine
+    
+    connectable = create_engine(
+        sync_url,
         poolclass=pool.NullPool,
-        future=True,
     )
 
-    async def do_run_migrations():
-        async with connectable.connect() as connection:
-            await connection.run_sync(do_migrations)
-        await connectable.dispose()
-
-    def do_migrations(connection):
+    with connectable.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
         )
+        
         with context.begin_transaction():
             context.run_migrations()
-
-    asyncio.run(do_run_migrations())
 
 
 if context.is_offline_mode():
