@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     CLERK_PUBLISHABLE_KEY: str = ""
     CLERK_WEBHOOK_SECRET: str = ""
     
+    # AI API for SMBPilot (OpenAI, Anthropic, or Groq)
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    AI_PROVIDER: str = "groq"  # "openai", "anthropic", or "groq" (FREE!)
+    
     # Security
     SECRET_KEY: str = ""
 

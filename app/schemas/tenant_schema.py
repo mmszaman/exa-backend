@@ -1,63 +1,88 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_serializer
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 
 class Tenant(BaseModel):
     """Response model for tenant/organization data."""
     id: int
-    clerk_org_id: str
+    public_id: UUID = Field(..., alias="publicId")
     name: str
+    legal_name: Optional[str] = Field(None, alias="legalName")
     slug: str
-    logo_url: Optional[str] = None
-    brand: Optional[str] = None
+    logo_url: Optional[str] = Field(None, alias="logoUrl")
+    tax_id: Optional[str] = Field(None, alias="taxId")
+    type: Optional[str] = None
+    team_size: Optional[int] = Field(None, alias="teamSize")
     email: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
-    is_active: bool = True
-    plan: str = "free"
-    max_users: int = 5
-    max_projects: int = 3
-    stripe_customer_id: Optional[str] = None
-    billing_email: Optional[str] = None
+    status: str
     settings: Optional[dict] = None
     features: Optional[dict] = None
-    metadata: Optional[str] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-    trial_ends_at: Optional[datetime] = None
-    subscription_ends_at: Optional[datetime] = None
+    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
+    created_at: datetime = Field(..., alias="createdAt")
+    updated_at: Optional[datetime] = Field(None, alias="updatedAt")
+    deleted_at: Optional[datetime] = Field(None, alias="deletedAt")
     
-    class Config:
-        from_attributes = True
+    @field_serializer('public_id')
+    def serialize_public_id(self, value: UUID) -> str:
+        return str(value)
+    
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True
+    }
 
 
 class TenantCreate(BaseModel):
     """Model for creating a tenant."""
-    clerk_org_id: str
     name: str
+    legal_name: Optional[str] = Field(None, alias="legalName")
     slug: str
-    logo_url: Optional[str] = None
-    brand: Optional[str] = None
+    logo_url: Optional[str] = Field(None, alias="logoUrl")
+    tax_id: Optional[str] = Field(None, alias="taxId")
+    type: Optional[str] = None
+    team_size: Optional[int] = Field(None, alias="teamSize")
     email: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
-    plan: str = "free"
-    metadata: Optional[str] = None
+    status: str = "trial"
+    settings: Optional[dict] = None
+    features: Optional[dict] = None
+    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
+    
+    class Config:
+        populate_by_name = True
 
 
 class TenantUpdate(BaseModel):
     """Model for updating a tenant."""
     name: Optional[str] = None
-    logo_url: Optional[str] = None
+    legal_name: Optional[str] = Field(None, alias="legalName")
+    logo_url: Optional[str] = Field(None, alias="logoUrl")
+    tax_id: Optional[str] = Field(None, alias="taxId")
+    type: Optional[str] = None
+    team_size: Optional[int] = Field(None, alias="teamSize")
     email: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
-    is_active: Optional[bool] = None
-    plan: Optional[str] = None
-    max_users: Optional[int] = None
-    max_projects: Optional[int] = None
-    billing_email: Optional[str] = None
+    status: Optional[str] = None
     settings: Optional[dict] = None
     features: Optional[dict] = None
-    metadata: Optional[str] = None
+    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
+    
+    class Config:
+        populate_by_name = True
+
+
+class TenantListResponse(BaseModel):
+    """Response model for paginated tenant list."""
+    tenants: list[Tenant]
+    total: int
+    page: int
+    page_size: int = Field(..., alias="pageSize")
+    
+    class Config:
+        populate_by_name = True

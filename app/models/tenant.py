@@ -1,51 +1,54 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index, JSON
+from sqlalchemy import Column, BigInteger, String, Boolean, DateTime, Text, Index
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+import uuid
 from app.core.database import Base
+
 
 class TenantModel(Base):
     __tablename__ = "tenants"
     
     # Primary Key
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(BigInteger, primary_key=True, index=True)
+    public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
     
     # Organization Information
-    name = Column(String(255), nullable=False, index=True)
+    name = Column(String(255), index=True, nullable=False)
+    legal_name = Column(String(255), index=True, nullable=True)
     slug = Column(String(255), unique=True, index=True, nullable=False)
-    
-    # Branding & Identity
     logo_url = Column(String(500), nullable=True)
-    brand = Column(String(100), index=True, nullable=True)  # addvive, exakeep, smbhub, etc.
+    tax_id = Column(String(50), nullable=True)
+    type = Column(String(50), nullable=True, index=True)
+    team_size = Column(BigInteger, nullable=True)
     
     # Contact Information
     email = Column(String(255), nullable=True)
     phone = Column(String(50), nullable=True)
     website = Column(String(255), nullable=True)
     
-    # Status & Plan
-    is_active = Column(Boolean, default=True, index=True)
-    plan = Column(String(50), default="free", index=True)  # free, starter, pro, enterprise
-    max_users = Column(Integer, default=5)
-    max_projects = Column(Integer, default=3)
-    
-    # Billing (for future integration)
-    stripe_customer_id = Column(String(255), unique=True, nullable=True)
-    billing_email = Column(String(255), nullable=True)
+    # Status
+    status = Column(String(50), nullable=False, default="active", index=True)
     
     # Settings & Preferences
-    settings = Column(JSON, nullable=True)  # Store organization settings as JSON
-    features = Column(JSON, nullable=True)  # Feature flags
+    settings = Column(JSONB, nullable=True)
+    features = Column(JSONB, nullable=True)
     
     # Metadata
-    clerk_metadata = Column(Text, nullable=True)  # Additional JSON data from Clerk
+    clerk_metadata = Column(JSONB, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    trial_ends_at = Column(DateTime(timezone=True), nullable=True)
-    subscription_ends_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    
+    # Relationships
+    businesses = relationship("BusinessModel", back_populates="tenant", cascade="all, delete-orphan")
+    roles = relationship("RoleModel", back_populates="tenant", cascade="all, delete-orphan")
+    teams = relationship("TeamModel", back_populates="tenant", cascade="all, delete-orphan")
+    conversations = relationship("ConversationModel", back_populates="tenant", cascade="all, delete-orphan")
     
     # Composite Indexes
     __table_args__ = (
-        Index('idx_brand_active', 'brand', 'is_active'),
-        Index('idx_plan_active', 'plan', 'is_active'),
+        Index('idx_type_status', 'type', 'status'),
     )

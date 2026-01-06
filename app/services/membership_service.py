@@ -15,14 +15,16 @@ class MembershipService:
         db: AsyncSession,
         user_id: int,
         tenant_id: int,
-        role: str = "member"
+        role: str = "member",
+        is_primary: bool = False
     ) -> MembershipModel:
         """Create a new tenant membership"""
         membership = MembershipModel(
             user_id=user_id,
             tenant_id=tenant_id,
             role=role,
-            is_active=True
+            is_active=True,
+            is_primary=is_primary
         )
         db.add(membership)
         await db.commit()
@@ -193,3 +195,45 @@ class MembershipService:
             return False
         
         return True
+    
+    # Set primary tenant for a user
+    @staticmethod
+    async def set_primary_tenant(
+        db: AsyncSession,
+        user_id: int,
+        tenant_id: int
+    ) -> MembershipModel:
+        """Set a tenant as the primary tenant for a user"""
+        # Verify the membership exists and is active
+        membership = await MembershipService.get_membership(db, user_id, tenant_id)
+        
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Membership not found"
+            )
+        
+        if not membership.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot set inactive membership as primary"
+            )
+        
+        # Unset all other primary tenants for this user
+        result = await db.execute(
+            select(MembershipModel).filter(
+                MembershipModel.user_id == user_id,
+                MembershipModel.is_primary == True
+            )
+        )
+        current_primary_memberships = result.scalars().all()
+        
+        for pm in current_primary_memberships:
+            pm.is_primary = False
+        
+        # Set the new primary tenant
+        membership.is_primary = True
+        
+        await db.commit()
+        await db.refresh(membership)
+        return membership

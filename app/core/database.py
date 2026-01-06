@@ -29,6 +29,9 @@ if settings.DATABASE_URL and "postgresql" in settings.DATABASE_URL:
         max_overflow=0,
         pool_pre_ping=True,
         pool_recycle=3600,
+        connect_args={
+            "statement_cache_size": 0  # Disable prepared statement cache in dev to prevent schema change errors
+        }
     )
 else:
     # Fallback engine for when DB is not configured (e.g., during migrations)

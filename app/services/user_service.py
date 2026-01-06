@@ -43,7 +43,6 @@ class UserService:
         full_name: Optional[str] = None,
         avatar_url: Optional[str] = None,
         phone_number: Optional[str] = None,
-        role: str = "member",
         lead_source: Optional[str] = None,
         brand: Optional[str] = None,
         referral_code: Optional[str] = None,
@@ -109,7 +108,6 @@ class UserService:
             full_name=full_name,
             avatar_url=avatar_url,
             phone_number=phone_number,
-            role=role,
             lead_source=lead_source,
             brand=brand,
             referral_code=referral_code,
@@ -125,6 +123,32 @@ class UserService:
         await db.commit()
         await db.refresh(user)
         return user, False  # Return False for new user
+    
+
+    # Create user from Clerk data (simplified auto-provision)
+    # Input: DB session, clerk_user_id str, email str, optional fields; Output: UserModel
+    @staticmethod
+    async def create_from_clerk(
+        db: AsyncSession,
+        clerk_user_id: str,
+        email: str,
+        username: Optional[str] = None,
+        full_name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        phone_number: Optional[str] = None
+    ) -> UserModel:
+        """Create user from Clerk data during auto-provisioning."""
+        user, _ = await UserService.create_user(
+            db=db,
+            clerk_user_id=clerk_user_id,
+            email=email,
+            username=username,
+            full_name=full_name,
+            avatar_url=avatar_url,
+            phone_number=phone_number
+        )
+        logger.info(f"Auto-provisioned user from Clerk: {clerk_user_id}")
+        return user
     
 
     # Update user from Clerk data

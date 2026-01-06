@@ -9,6 +9,7 @@ class Membership(BaseModel):
     tenant_id: int
     role: str
     is_active: bool
+    is_primary: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
     joined_at: datetime
@@ -22,8 +23,10 @@ class MembershipCreate(BaseModel):
     tenant_id: int
     role: str = "member"
     is_active: bool = True
+    is_primary: bool = False
 
 
 class MembershipUpdate(BaseModel):
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    is_primary: Optional[bool] = None
