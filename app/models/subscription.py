@@ -23,7 +23,7 @@ class SubscriptionModel(Base):
     public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     billing_profile_id = Column(BigInteger, ForeignKey("billing_profiles.id"), nullable=True, index=True)
     product_id = Column(BigInteger, ForeignKey("products.id"), nullable=False, index=True)
 

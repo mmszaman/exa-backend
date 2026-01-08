@@ -13,7 +13,7 @@ class ConversationModel(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     
     title = Column(String(255), nullable=True)  # Auto-generated from first message
     status = Column(String(50), default="active", nullable=False)  # active, archived, deleted

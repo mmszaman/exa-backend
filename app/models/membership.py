@@ -34,7 +34,6 @@ class MembershipModel(Base):
     tenant = relationship("TenantModel", backref="members")
     member_roles = relationship("MemberRoleModel", back_populates="membership", cascade="all, delete-orphan")
     permission_overrides = relationship("MemberPermissionOverrideModel", back_populates="membership", cascade="all, delete-orphan")
-    team_memberships = relationship("TeamMemberModel", back_populates="membership", cascade="all, delete-orphan")
     
     # Constraints
     __table_args__ = (

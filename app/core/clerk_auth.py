@@ -153,5 +153,119 @@ async def get_current_user(
     return user
 
 
+# Clerk Organization Helper Functions
+async def get_clerk_org(org_id: str) -> dict:
+    """Get organization from Clerk API"""
+    from clerk_backend_api import Clerk
+    
+    try:
+        clerk_client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+        org = clerk_client.organizations.get(organization_id=org_id)
+        return {
+            "id": org.id,
+            "name": org.name,
+            "slug": org.slug,
+            "image_url": org.image_url,
+            "created_at": org.created_at,
+            "updated_at": org.updated_at,
+            "public_metadata": org.public_metadata,
+            "private_metadata": org.private_metadata,
+        }
+    except Exception as e:
+        logger.error(f"Failed to get Clerk organization {org_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Organization not found in Clerk"
+        )
+
+
+async def create_clerk_org(name: str, created_by: str, slug: str = None) -> dict:
+    """Create organization in Clerk"""
+    from clerk_backend_api import Clerk
+    
+    try:
+        clerk_client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+        org = clerk_client.organizations.create(
+            name=name,
+            slug=slug,
+            created_by=created_by
+        )
+        return {
+            "id": org.id,
+            "name": org.name,
+            "slug": org.slug,
+            "image_url": org.image_url,
+            "created_at": org.created_at,
+        }
+    except Exception as e:
+        logger.error(f"Failed to create Clerk organization: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create organization in Clerk: {str(e)}"
+        )
+
+
+async def get_user_clerk_orgs(user_id: str) -> list:
+    """Get all organizations for a user from Clerk"""
+    from clerk_backend_api import Clerk
+    
+    try:
+        clerk_client = Clerk(bearer_auth=settings.CLERK_SECRET_KEY)
+        memberships = clerk_client.users.get_organization_memberships(user_id=user_id)
+        
+        orgs = []
+        for membership in memberships.data if hasattr(memberships, 'data') else memberships:
+            orgs.append({
+                "id": membership.organization.id,
+                "name": membership.organization.name,
+                "slug": membership.organization.slug,
+                "image_url": membership.organization.image_url,
+                "role": membership.role,
+            })
+        return orgs
+    except Exception as e:
+        logger.error(f"Failed to get user organizations from Clerk: {str(e)}")
+        return []
+
+
+async def sync_clerk_org_to_db(db: AsyncSession, clerk_org_id: str, clerk_org_data: dict = None):
+    """Sync Clerk organization to local database"""
+    from app.models.tenant import TenantModel
+    from sqlalchemy import select
+    
+    # Get org data from Clerk if not provided
+    if not clerk_org_data:
+        clerk_org_data = await get_clerk_org(clerk_org_id)
+    
+    # Check if tenant exists
+    result = await db.execute(
+        select(TenantModel).filter(TenantModel.clerk_org_id == clerk_org_id)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if tenant:
+        # Update existing tenant
+        tenant.name = clerk_org_data.get("name", tenant.name)
+        tenant.slug = clerk_org_data.get("slug", tenant.slug)
+        tenant.logo_url = clerk_org_data.get("image_url", tenant.logo_url)
+        tenant.clerk_metadata = clerk_org_data.get("public_metadata", tenant.clerk_metadata)
+        tenant.updated_at = clerk_org_data.get("updated_at")
+    else:
+        # Create new tenant
+        tenant = TenantModel(
+            clerk_org_id=clerk_org_id,
+            name=clerk_org_data["name"],
+            slug=clerk_org_data.get("slug"),
+            logo_url=clerk_org_data.get("image_url"),
+            status="active",
+            clerk_metadata=clerk_org_data.get("public_metadata"),
+        )
+        db.add(tenant)
+    
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
 CurrentUserId = Annotated[str, Depends(get_current_user_id)]
 CurrentUser = Annotated[UserModel, Depends(get_current_user)]

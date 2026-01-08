@@ -16,7 +16,7 @@ class BillingProfileModel(Base):
     public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, unique=True, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
 
     # Provider
     provider = Column(String(50), nullable=False, default="stripe")  # stripe, paypal, etc.
@@ -66,7 +66,7 @@ class InvoiceModel(Base):
     public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     billing_profile_id = Column(BigInteger, ForeignKey("billing_profiles.id"), nullable=True, index=True)
     subscription_id = Column(BigInteger, ForeignKey("subscriptions.id"), nullable=True, index=True)
 
@@ -137,7 +137,7 @@ class PaymentModel(Base):
     public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     billing_profile_id = Column(BigInteger, ForeignKey("billing_profiles.id"), nullable=True, index=True)
     invoice_id = Column(BigInteger, ForeignKey("invoices.id"), nullable=True, index=True)
 
@@ -173,7 +173,7 @@ class BillingCreditModel(Base):
     id = Column(BigInteger, primary_key=True, index=True)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     billing_profile_id = Column(BigInteger, ForeignKey("billing_profiles.id"), nullable=True, index=True)
 
     # Amount
@@ -199,7 +199,7 @@ class UsageRecordModel(Base):
     id = Column(BigInteger, primary_key=True, index=True)
 
     # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     subscription_id = Column(BigInteger, ForeignKey("subscriptions.id"), nullable=True, index=True)
 
     # Metrics

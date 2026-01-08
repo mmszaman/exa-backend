@@ -7,7 +7,6 @@ Multi-tenant RBAC with support for:
 - Role-permission mappings with conditions
 - Member role assignments
 - Member permission overrides
-- Teams for organizational hierarchy
 - Resource-level grants (object-level access)
 """
 import enum
@@ -33,7 +32,6 @@ class EffectType(str, enum.Enum):
 class SubjectType(str, enum.Enum):
     """Resource grant subject type."""
     MEMBERSHIP = "membership"
-    TEAM = "team"
 
 
 class AccessLevel(str, enum.Enum):
@@ -119,7 +117,6 @@ class RoleModel(Base):
     tenant = relationship("TenantModel", back_populates="roles")
     role_permissions = relationship("RolePermissionModel", back_populates="role", cascade="all, delete-orphan")
     member_roles = relationship("MemberRoleModel", back_populates="role", cascade="all, delete-orphan")
-    team_roles = relationship("TeamRoleModel", back_populates="role", cascade="all, delete-orphan")
 
     # Constraints
     __table_args__ = (
@@ -249,140 +246,12 @@ class MemberPermissionOverrideModel(Base):
     )
 
 
-# ================== 6) Teams ==================
-
-class TeamModel(Base):
-    """
-    Optional organizational grouping layer.
-    Supports departments, squads, or any hierarchical structure.
-    """
-    __tablename__ = "teams"
-
-    # Primary Key
-    id = Column(BigInteger, primary_key=True, index=True)
-    public_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True, server_default=func.uuid_generate_v4())
-
-    # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    # Team Identity
-    name = Column(String(150), nullable=False)
-    slug = Column(String(160), nullable=False)
-    description = Column(Text)
-
-    # Creation Tracking
-    created_by_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
-
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True), index=True)
-
-    # Relationships
-    tenant = relationship("TenantModel", back_populates="teams")
-    created_by = relationship("UserModel", foreign_keys=[created_by_user_id])
-    team_members = relationship("TeamMemberModel", back_populates="team", cascade="all, delete-orphan")
-    team_roles = relationship("TeamRoleModel", back_populates="team", cascade="all, delete-orphan")
-    resource_grants = relationship("ResourceGrantModel", 
-                                   foreign_keys="ResourceGrantModel.subject_id",
-                                   primaryjoin="and_(TeamModel.id==foreign(ResourceGrantModel.subject_id), ResourceGrantModel.subject_type=='team')",
-                                   cascade="all, delete-orphan",
-                                   viewonly=True)
-
-    # Constraints
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'slug', name='uq_tenant_team_slug'),
-        Index('idx_team_tenant_deleted', 'tenant_id', 'deleted_at'),
-    )
-
-
-# ================== 7) Team Members ==================
-
-class TeamMemberModel(Base):
-    """
-    Membership in teams.
-    Links memberships to teams with join/leave tracking.
-    """
-    __tablename__ = "team_members"
-
-    # Primary Key
-    id = Column(BigInteger, primary_key=True, index=True)
-
-    # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    team_id = Column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
-    membership_id = Column(BigInteger, ForeignKey("memberships.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    # Status & Tracking
-    is_active = Column(Boolean, default=True, nullable=False)
-    joined_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    left_at = Column(DateTime(timezone=True))
-
-    # Timestamp
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    # Relationships
-    tenant = relationship("TenantModel")
-    team = relationship("TeamModel", back_populates="team_members")
-    membership = relationship("MembershipModel", back_populates="team_memberships")
-
-    # Constraints
-    __table_args__ = (
-        UniqueConstraint('team_id', 'membership_id', name='uq_team_member'),
-        Index('idx_team_member_tenant_active', 'tenant_id', 'is_active'),
-        Index('idx_team_member_team_active', 'team_id', 'is_active'),
-        Index('idx_team_member_membership', 'membership_id', 'is_active'),
-    )
-
-
-# ================== 8) Team Role Assignments ==================
-
-class TeamRoleModel(Base):
-    """
-    Assigns roles at team scope.
-    Members inherit team roles for simplified permission management.
-    """
-    __tablename__ = "team_roles"
-
-    # Primary Key
-    id = Column(BigInteger, primary_key=True, index=True)
-    public_id = Column(UUID(as_uuid=True), unique=True, nullable=False, index=True, server_default=func.uuid_generate_v4())
-
-    # Ownership
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    team_id = Column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False, index=True)
-    role_id = Column(BigInteger, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
-
-    # Assignment Tracking
-    assigned_by_user_id = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"))
-    is_active = Column(Boolean, default=True, nullable=False)
-    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    revoked_at = Column(DateTime(timezone=True))
-
-    # Timestamp
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    # Relationships
-    tenant = relationship("TenantModel")
-    team = relationship("TeamModel", back_populates="team_roles")
-    role = relationship("RoleModel", back_populates="team_roles")
-    assigned_by = relationship("UserModel", foreign_keys=[assigned_by_user_id])
-
-    # Constraints
-    __table_args__ = (
-        UniqueConstraint('team_id', 'role_id', name='uq_team_role'),
-        Index('idx_team_role_tenant_active', 'tenant_id', 'is_active'),
-        Index('idx_team_role_team_active', 'team_id', 'is_active'),
-        Index('idx_team_role_revoked', 'revoked_at'),
-    )
-
-
-# ================== 9) Resource Grants ==================
+# ================== 6) Resource Grants ==================
 
 class ResourceGrantModel(Base):
     """
     Object-level access control (row-level permissions).
-    Grants specific members or teams access to individual resources.
+    Grants specific members access to individual resources.
     Avoids per-row ACL table explosion by using a polymorphic approach.
     """
     __tablename__ = "resource_grants"
@@ -395,8 +264,8 @@ class ResourceGrantModel(Base):
     tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
 
     # Subject (who gets access)
-    subject_type = Column(String(20), nullable=False)  # "membership" | "team"
-    subject_id = Column(BigInteger, nullable=False)     # memberships.id or teams.id
+    subject_type = Column(String(20), nullable=False)  # "membership"
+    subject_id = Column(BigInteger, nullable=False)     # memberships.id
 
     # Resource (what they access)
     resource_type = Column(String(50), nullable=False)  # e.g., "business", "project", "contact"
@@ -420,7 +289,7 @@ class ResourceGrantModel(Base):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("subject_type IN ('membership', 'team')", name='check_subject_type_valid'),
+        CheckConstraint("subject_type IN ('membership')", name='check_subject_type_valid'),
         Index('idx_resource_grant_tenant_deleted', 'tenant_id', 'deleted_at'),
         Index('idx_resource_grant_subject', 'subject_type', 'subject_id', 'deleted_at'),
         Index('idx_resource_grant_resource', 'resource_type', 'resource_id', 'deleted_at'),

@@ -13,7 +13,7 @@ class ProductModel(Base):
     public_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4, index=True, nullable=False)
 
     # Ownership & Relationships
-    tenant_id = Column(BigInteger, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(BigInteger, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     business_id = Column(BigInteger, ForeignKey("businesses.id"), nullable=True, index=True)
     created_by = Column(BigInteger, ForeignKey("users.id"), nullable=False, index=True)
 

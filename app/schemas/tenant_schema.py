@@ -1,27 +1,20 @@
-from pydantic import BaseModel, Field, field_serializer
+from pydantic import BaseModel, Field, field_serializer, field_validator
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-
+# Tenant Schemas
+# Tenant properties when retrieved from the system
 class Tenant(BaseModel):
-    """Response model for tenant/organization data."""
     id: int
     public_id: UUID = Field(..., alias="publicId")
+    clerk_org_id: Optional[str] = Field(None, alias="clerkOrgId")
     name: str
-    legal_name: Optional[str] = Field(None, alias="legalName")
-    slug: str
-    logo_url: Optional[str] = Field(None, alias="logoUrl")
-    tax_id: Optional[str] = Field(None, alias="taxId")
-    type: Optional[str] = None
-    team_size: Optional[int] = Field(None, alias="teamSize")
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
+    slug: Optional[str] = None
     status: str
-    settings: Optional[dict] = None
-    features: Optional[dict] = None
-    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
+    suspension_reason: Optional[str] = Field(None, alias="suspensionReason")
+    suspended_at: Optional[datetime] = Field(None, alias="suspendedAt")
+    deactivated_at: Optional[datetime] = Field(None, alias="deactivatedAt")
     created_at: datetime = Field(..., alias="createdAt")
     updated_at: Optional[datetime] = Field(None, alias="updatedAt")
     deleted_at: Optional[datetime] = Field(None, alias="deletedAt")
@@ -35,50 +28,28 @@ class Tenant(BaseModel):
         "populate_by_name": True
     }
 
-
-class TenantCreate(BaseModel):
-    """Model for creating a tenant."""
-    name: str
-    legal_name: Optional[str] = Field(None, alias="legalName")
-    slug: str
-    logo_url: Optional[str] = Field(None, alias="logoUrl")
-    tax_id: Optional[str] = Field(None, alias="taxId")
-    type: Optional[str] = None
-    team_size: Optional[int] = Field(None, alias="teamSize")
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    status: str = "trial"
-    settings: Optional[dict] = None
-    features: Optional[dict] = None
-    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
-    
-    class Config:
-        populate_by_name = True
-
-
-class TenantUpdate(BaseModel):
-    """Model for updating a tenant."""
+# Input model for creating or updating a tenant
+class TenantInput(BaseModel):
     name: Optional[str] = None
-    legal_name: Optional[str] = Field(None, alias="legalName")
-    logo_url: Optional[str] = Field(None, alias="logoUrl")
-    tax_id: Optional[str] = Field(None, alias="taxId")
-    type: Optional[str] = None
-    team_size: Optional[int] = Field(None, alias="teamSize")
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    website: Optional[str] = None
-    status: Optional[str] = None
-    settings: Optional[dict] = None
-    features: Optional[dict] = None
-    clerk_metadata: Optional[dict] = Field(None, alias="clerkMetadata")
+    slug: Optional[str] = Field(default=None)
+    status: Optional[str] = Field(default="active")
+    suspension_reason: Optional[str] = Field(default=None, alias="suspensionReason")
     
-    class Config:
-        populate_by_name = True
+    @field_validator('slug', 'suspension_reason', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        """Convert empty strings to None for optional string fields."""
+        if v == "" or v is None:
+            return None
+        return v
+    
+    model_config = {
+        "populate_by_name": True,
+        "str_strip_whitespace": True
+    }
 
-
+# Tenant list response model
 class TenantListResponse(BaseModel):
-    """Response model for paginated tenant list."""
     tenants: list[Tenant]
     total: int
     page: int
@@ -86,3 +57,4 @@ class TenantListResponse(BaseModel):
     
     class Config:
         populate_by_name = True
+
